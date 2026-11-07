@@ -60,6 +60,10 @@ func _input(event: InputEvent) -> void:
 	if key.keycode == KEY_F11 or (is_enter and key.alt_pressed):
 		toggle_fullscreen()
 		get_viewport().set_input_as_handled()
+	elif key.keycode == KEY_ESCAPE and is_fullscreen(get_window().mode):
+		# Esc only leaves full screen; when windowed it passes through to the game.
+		get_window().mode = Window.MODE_WINDOWED
+		get_viewport().set_input_as_handled()
 
 
 func toggle_fullscreen() -> void:
@@ -67,9 +71,13 @@ func toggle_fullscreen() -> void:
 	window.mode = next_window_mode(window.mode)
 
 
+static func is_fullscreen(mode: Window.Mode) -> bool:
+	return mode == Window.MODE_FULLSCREEN or mode == Window.MODE_EXCLUSIVE_FULLSCREEN
+
+
 ## Full screen ⇄ windowed. Any non-full-screen mode goes to full screen.
 static func next_window_mode(mode: Window.Mode) -> Window.Mode:
-	if mode == Window.MODE_FULLSCREEN or mode == Window.MODE_EXCLUSIVE_FULLSCREEN:
+	if is_fullscreen(mode):
 		return Window.MODE_WINDOWED
 	return Window.MODE_FULLSCREEN
 

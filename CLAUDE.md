@@ -36,7 +36,8 @@ fighting for control of the Orichalcum rock in the middle. Spec: `design/GDD.md`
 - Display: design (base) resolution 1920×1080; the window opens at 1600×900
   (window size override), resizable. Stretch mode `canvas_items`, aspect `expand`
   (UI scales; 3D renders at native resolution, so it's sharp at 1080p, 1440p and 4K).
-  F11 and Alt+Enter toggle full screen (`view/app.gd`, autoload `App`).
+  F11 and Alt+Enter toggle full screen; Esc leaves full screen
+  (`view/app.gd`, autoload `App`).
 - Art: stylised low-poly, bright saturated colours, ONE art family (no mixing packs
   with different proportions/styles). Placeholders (primitive meshes, team-coloured)
   until a milestone works. Every external asset is CC0 or own work, listed with its

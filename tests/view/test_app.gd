@@ -15,6 +15,13 @@ func test_fullscreen_toggle_mode() -> void:
 	assert_int(AppScript.next_window_mode(Window.MODE_EXCLUSIVE_FULLSCREEN)).is_equal(Window.MODE_WINDOWED)
 
 
+func test_is_fullscreen() -> void:
+	assert_bool(AppScript.is_fullscreen(Window.MODE_FULLSCREEN)).is_true()
+	assert_bool(AppScript.is_fullscreen(Window.MODE_EXCLUSIVE_FULLSCREEN)).is_true()
+	assert_bool(AppScript.is_fullscreen(Window.MODE_WINDOWED)).is_false()
+	assert_bool(AppScript.is_fullscreen(Window.MODE_MAXIMIZED)).is_false()
+
+
 func test_parse_user_args() -> void:
 	var args: Dictionary = AppScript.parse_user_args(PackedStringArray(["--selftest", "--frames=60", "junk"]))
 	assert_bool(args.has("selftest")).is_true()
