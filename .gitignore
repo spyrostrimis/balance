@@ -1,0 +1,21 @@
+# Godot
+.godot/
+*.translation
+export_credentials.cfg
+
+# Build output
+build/
+
+# gdUnit4 reports / temp
+reports/
+addons/gdUnit4/reports/
+GdUnitRunner.cfg
+
+# Misc
+*.tmp
+*.log
+*.bak
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
