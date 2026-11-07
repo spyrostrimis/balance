@@ -7,8 +7,9 @@ const MISSION_PATH: String = "res://data/missions/mission_01.tres"
 const CAMERA_EDGE_INSET: float = 8.0
 ## Never run more than this many sim ticks in one frame (avoids a spiral after a hitch).
 const MAX_TICKS_PER_FRAME: int = 5
-## Self-test: cell the Blue units are ordered to (open ground south-west of the rock).
-const SELFTEST_MOVE_CELL: Vector2i = Vector2i(13, 17)
+## Self-test: Blue is ordered here: just north of the west cliff spur, so the path
+## has to go round it and the units end up behind a cliff (silhouettes visible).
+const SELFTEST_MOVE_CELL: Vector2i = Vector2i(3, 18)
 
 @onready var map_view: MapView = $MapView
 @onready var units_root: Node3D = $Units
@@ -53,7 +54,12 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	_tick_accumulator += delta
+	if App.is_selftest:
+		# Deterministic: exactly one sim tick per frame, whatever the frame rate.
+		_tick_accumulator = SimWorld.TICK_SECONDS
+		delta = SimWorld.TICK_SECONDS
+	else:
+		_tick_accumulator += delta
 	var ticks: int = 0
 	while _tick_accumulator >= SimWorld.TICK_SECONDS and ticks < MAX_TICKS_PER_FRAME:
 		world.step()
@@ -113,18 +119,29 @@ func _selftest_setup() -> void:
 	selection.order_move(SELFTEST_MOVE_CELL)
 
 
-## Poses: start view, Blue close-up, whole map, Red close-up, clamped corner.
+## Poses: Blue mid-route, whole map, Red close-up, clamped corner, Blue close-up
+## (last, so Blue has arrived behind the cliff).
 func _on_selftest_shot(index: int, _total: int) -> void:
 	var map_center: Vector3 = GridSpace.gridf_to_world(Vector2(world.grid.size()) * 0.5)
 	match (index - 1) % 5:
 		0:
-			rts_camera.snap_to(_spawn_center(world.grid.blue_spawns), rts_camera.start_distance)
+			rts_camera.snap_to(_team_center(SimUnit.Team.BLUE), rts_camera.start_distance)
 		1:
-			rts_camera.snap_to(_team_center(SimUnit.Team.BLUE), rts_camera.min_distance)
-		2:
 			rts_camera.snap_to(map_center, rts_camera.max_distance)
-		3:
+		2:
 			rts_camera.snap_to(_team_center(SimUnit.Team.RED), rts_camera.min_distance)
-		4:
+		3:
 			rts_camera.snap_to(Vector3(1000.0, 0.0, -1000.0), rts_camera.start_distance)
-	App.selftest_note("shot %d: blue units at %s" % [index, _team_center(SimUnit.Team.BLUE)])
+		4:
+			rts_camera.snap_to(_team_center(SimUnit.Team.BLUE), rts_camera.min_distance + 4.0)
+	var cells: Dictionary[Vector2i, bool] = {}
+	var moving: int = 0
+	var blue: int = 0
+	for view: UnitView in unit_views:
+		if view.unit.team == SimUnit.Team.BLUE:
+			blue += 1
+			cells[view.unit.cell()] = true
+			if view.unit.is_moving():
+				moving += 1
+	App.selftest_note("shot %d (tick %d): blue on %d distinct cells of %d, %d moving: %s" % [
+			index, world.tick, cells.size(), blue, moving, cells.keys()])

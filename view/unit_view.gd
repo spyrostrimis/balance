@@ -12,6 +12,8 @@ const HERO_TRIM_COLOR: Color = Color(1.0, 0.82, 0.25)
 const DARK_COLOR: Color = Color(0.18, 0.18, 0.2)
 const RING_COLOR: Color = Color(0.3, 1.0, 0.35)
 const TURN_SPEED: float = 12.0
+const SILHOUETTE_SHADER: Shader = preload("res://view/shaders/occluded_silhouette.gdshader")
+const SILHOUETTE_ALPHA: float = 0.6
 
 var unit: SimUnit
 ## Picking volume (world units): a sphere of this radius around the model's middle.
@@ -25,12 +27,18 @@ var selected: bool = false:
 
 var _ring: MeshInstance3D
 var _ring_radius: float = 0.8
+var _silhouette: ShaderMaterial
 
 
 func setup(sim_unit: SimUnit) -> void:
 	unit = sim_unit
 	name = "Unit%d_%s" % [unit.id, unit.stats.id]
 	var color: Color = TEAM_COLORS[unit.team]
+	_silhouette = ShaderMaterial.new()
+	_silhouette.shader = SILHOUETTE_SHADER
+	var sil_color: Color = color.lightened(0.25)
+	sil_color.a = SILHOUETTE_ALPHA
+	_silhouette.set_shader_parameter("silhouette_color", sil_color)
 	if unit.stats.is_hero:
 		_build_hero(color)
 	elif unit.stats.id == &"light_vehicle":
@@ -121,6 +129,10 @@ func _build_ring() -> void:
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.albedo_color = RING_COLOR
+	# Drawn on top of everything so the ring stays visible behind cliffs.
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.no_depth_test = true
+	mat.render_priority = 1
 	_ring = MeshInstance3D.new()
 	_ring.name = "SelectionRing"
 	_ring.mesh = torus
@@ -138,6 +150,7 @@ func _add_part(mesh: Mesh, color: Color, offset: Vector3) -> void:
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = 0.6
+	mat.next_pass = _silhouette
 	part.material_override = mat
 	part.position = offset
 	add_child(part)

@@ -81,6 +81,20 @@ static func cliff_block(size: Vector3, seed_value: int) -> ArrayMesh:
 	return _translated(mesh, Vector3(0.0, size.y * 0.5 - 0.3, 0.0))
 
 
+## Copy of `mesh` with every vertex pulled inside |x|, |z| <= half_extent, so a
+## jittered tile never pokes into neighbouring cells (where units stand).
+static func clamped_xz(mesh: ArrayMesh, half_extent: float) -> ArrayMesh:
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	for i: int in verts.size():
+		var v: Vector3 = verts[i]
+		verts[i] = Vector3(clampf(v.x, -half_extent, half_extent), v.y, clampf(v.z, -half_extent, half_extent))
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	var out: ArrayMesh = ArrayMesh.new()
+	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return out
+
+
 ## Pointed crystal (5-sided spike) with its base at y = 0.
 static func crystal(radius: float, length: float, seed_value: int) -> ArrayMesh:
 	var cyl: CylinderMesh = CylinderMesh.new()

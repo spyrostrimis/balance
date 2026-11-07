@@ -7,6 +7,8 @@ extends Resource
 @export var id: StringName = &""
 @export var display_name: String = ""
 @export var is_hero: bool = false
+## Air units fly over terrain and ground units, but can only stop on free ground cells.
+@export var is_air: bool = false
 ## Movement speed in cells per second.
 @export var move_speed: float = 2.0
 ## Footprint radius in cells (for collision/spacing later).

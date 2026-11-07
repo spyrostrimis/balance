@@ -85,7 +85,8 @@ func _build_library() -> MeshLibrary:
 		next_id += 1
 
 	for v: int in ROCK_VARIANTS:
-		var rock: ArrayMesh = LowPoly.boulder(cs * (0.52 + 0.04 * v), cs * (0.75 + 0.15 * v), 100 + v)
+		var rock: ArrayMesh = LowPoly.clamped_xz(
+				LowPoly.boulder(cs * (0.52 + 0.04 * v), cs * (0.75 + 0.15 * v), 100 + v), cs * 0.5)
 		rock.surface_set_material(0, _material(ROCK_COLOR))
 		lib.create_item(next_id)
 		lib.set_item_name(next_id, "rock_%d" % v)
@@ -94,7 +95,9 @@ func _build_library() -> MeshLibrary:
 		next_id += 1
 
 	for v: int in CLIFF_VARIANTS:
-		var cliff: ArrayMesh = LowPoly.cliff_block(Vector3(cs * 1.08, cs * (1.4 + 0.2 * v), cs * 1.08), 200 + v)
+		# Kept inside its own cell so cliffs never cover units standing next to them.
+		var cliff: ArrayMesh = LowPoly.clamped_xz(
+				LowPoly.cliff_block(Vector3(cs * 1.04, cs * (1.15 + 0.15 * v), cs * 1.04), 200 + v), cs * 0.5)
 		cliff.surface_set_material(0, _material(CLIFF_COLOR))
 		lib.create_item(next_id)
 		lib.set_item_name(next_id, "cliff_%d" % v)
@@ -113,7 +116,7 @@ func _build_deposit(rect: Rect2i, index: int) -> Node3D:
 
 	var base_height: float = footprint * 0.7
 	var base: MeshInstance3D = MeshInstance3D.new()
-	base.mesh = LowPoly.boulder(footprint * 0.5, base_height, 300 + index)
+	base.mesh = LowPoly.clamped_xz(LowPoly.boulder(footprint * 0.5, base_height, 300 + index), footprint * 0.5)
 	base.material_override = _material(DEPOSIT_ROCK_COLOR)
 	root.add_child(base)
 
@@ -132,12 +135,12 @@ func _build_deposit(rect: Rect2i, index: int) -> Node3D:
 		crystal.mesh = LowPoly.crystal(footprint * (0.1 if on_top else 0.08), length, 400 + i)
 		crystal.material_override = crystal_mat
 		var angle: float = TAU * float(i) / (5.0 if on_top else float(count - 5)) + rng.randf_range(-0.3, 0.3)
-		var dist: float = footprint * (rng.randf_range(0.0, 0.12) if on_top else rng.randf_range(0.3, 0.42))
+		var dist: float = footprint * (rng.randf_range(0.0, 0.12) if on_top else rng.randf_range(0.22, 0.3))
 		var y: float = base_height * (0.5 if on_top else rng.randf_range(0.1, 0.35))
 		crystal.position = Vector3(cos(angle) * dist, y, sin(angle) * dist)
 		var tilt_axis: Vector3 = Vector3(-sin(angle), 0.0, cos(angle))
 		# Negative angle tilts the tip away from the deposit centre.
-		crystal.basis = Basis(tilt_axis, -(rng.randf_range(0.1, 0.4) if on_top else rng.randf_range(0.7, 1.1)))
+		crystal.basis = Basis(tilt_axis, -(rng.randf_range(0.1, 0.4) if on_top else rng.randf_range(0.5, 0.8)))
 		root.add_child(crystal)
 
 	var glow: OmniLight3D = OmniLight3D.new()

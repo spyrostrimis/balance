@@ -30,7 +30,11 @@ fighting for control of the Orichalcum rock in the middle. Spec: `design/GDD.md`
   All grid ↔ world conversion goes through a single helper
   (`grid_to_world(Vector2i) -> Vector3`, `world_to_grid(Vector3) -> Vector2i`).
 - Camera: fixed-angle RTS camera (tilted, no rotation in v1), pan with screen
-  edges + WASD, zoom with the mouse wheel between a min and max, clamped to map bounds.
+  edges + WASD/arrows + middle-mouse drag (grab the map), zoom with the mouse wheel
+  between a min and max, clamped to map bounds.
+- Readability: terrain meshes stay inside their own cell. Units hidden behind
+  terrain draw a team-coloured silhouette (`view/shaders/occluded_silhouette.gdshader`),
+  and selection rings draw on top of everything.
 - Picking: mouse clicks are raycast into the 3D scene and converted to grid cells.
   Box selection projects unit positions to screen space and tests them against the box.
 - Display: design (base) resolution 1920×1080; the window opens at 1600×900
@@ -88,10 +92,11 @@ stdout/stderr reach the terminal). In Git Bash: `/c/Godot/Godot_v4.7.2-stable_wi
   Saves `selftest_<n>.png` screenshots and `selftest.log` to
   `user://selftest/` and prints the absolute path. Optional `--shots=N` (default 3).
   Before each shot `App.selftest_shot` fires; the mission scene snaps the camera to
-  5 poses in turn (start view, Blue close-up, whole map, Red close-up, clamped corner),
-  so use `--frames=500 --shots=5`. The mission scene also selects all Blue units,
-  checks picking/box selection and orders a move; scenes add lines to the log with
-  `App.selftest_note()`.
+  5 poses in turn (Blue mid-route, whole map, Red close-up, clamped corner, Blue
+  close-up), so use `--frames=500 --shots=5`. In self-test the sim runs exactly one
+  tick per frame (deterministic). The mission scene selects all Blue units, checks
+  picking/box selection, and orders them round the west cliff spur. It logs whether
+  they end on distinct cells; scenes add log lines with `App.selftest_note()`.
   Use it after every view change to check scale, orientation and that meshes sit
   on the ground — then look at the PNGs.
 - Windows build: `godot --headless --path . --export-release "Windows Desktop" build/balance.exe`

@@ -3,7 +3,8 @@ extends Control
 ## Player selection and orders. Full-screen overlay (ignores the mouse itself;
 ## reads unhandled input) that draws the drag box.
 ##   Left click unit: select it (Shift: add/remove).  Left click ground: clear.
-##   Left drag: box-select own units (Shift: add).  Right click ground: move order.
+##   Left drag: box-select own units (Shift: add).  Right click: move order (units
+##   stop on the nearest free cells; red marker = the clicked cell itself is blocked).
 ##   Esc: clear selection.
 ## Orders go to the sim as commands; this node never changes sim state directly.
 
@@ -174,14 +175,19 @@ func order_move_at(screen_pos: Vector2) -> void:
 func order_move(cell: Vector2i) -> void:
 	if _selected.is_empty():
 		return
-	var passable: bool = world.grid.is_passable(cell)
-	_show_marker(cell, passable)
-	if not passable:
-		return
+	# Red marker: the clicked cell itself can't be stood on; units stop nearby.
+	_show_marker(cell, world.is_cell_free(cell) or _selected_unit_on(cell))
 	var ids: Array[int] = []
 	for view: UnitView in _selected:
 		ids.append(view.unit.id)
 	world.queue_command(MoveCommand.new(player_team, ids, cell))
+
+
+func _selected_unit_on(cell: Vector2i) -> bool:
+	for view: UnitView in _selected:
+		if view.unit.cell() == cell and not view.unit.is_moving():
+			return true
+	return false
 
 
 func _show_marker(cell: Vector2i, ok: bool) -> void:

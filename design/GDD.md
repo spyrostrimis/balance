@@ -94,6 +94,26 @@ Religious, mysterious fanatics. Like the Emperor's forces in Dune II.
   against damaged units)**; escape option **(proposal)**.
   ⚠ Passive and escape option need a decision before milestone 5.
 
+## Movement
+Decided (playtest feedback after milestone 2):
+- **One unit per cell.** A unit can't stop on a cell that holds a rock, cliff,
+  building or another unit.
+- **Air units** fly over rocks, cliffs, buildings and ground units, and ground units
+  can pass under air units. But no unit, air or ground, can *stop* on a cell that
+  is blocked or already taken.
+- **Clicking a blocked cell** (rock, cliff, unit): the units go towards it and stop
+  on the nearest free cells in front of it.
+- **Clicking past an obstacle:** units find a path around it if one exists.
+  If the spot can't be reached at all, they go to the nearest reachable cell.
+- **Group orders** spread the units over the nearest free cells around the click
+  instead of stacking them.
+
+Implementation choices (proposal, easy to change):
+- A unit holds two cells while stepping between them.
+- A unit blocked by another unit waits briefly, then looks for a way round. If it
+  is still stuck after 3 seconds, it picks a new nearby spot once, then stops.
+- Ground units don't squeeze diagonally between two obstacles.
+
 ## Hazards and creatures
 - Like the Dune worms: creatures that roam and cause havoc. Different planets, different creatures —
   e.g. a pterodactyl or a huge lizard that eats harvesters, troops and civilians and can

@@ -1,7 +1,8 @@
 class_name MoveCommand
 extends SimCommand
-## Move the given units to a cell. Ignored if the cell is impassable.
-## (Milestone 2: straight-line movement; pathfinding and spreading come in milestone 3.)
+## Move the given units towards a cell. If the cell can't be stood on (rock,
+## cliff, another unit) or the group needs more room, units stop on the nearest
+## free reachable cells instead (see SimWorld.order_move).
 
 var unit_ids: Array[int] = []
 var target_cell: Vector2i = Vector2i.ZERO
@@ -14,11 +15,4 @@ func _init(issuing_team: SimUnit.Team, ids: Array[int], cell: Vector2i) -> void:
 
 
 func apply(world: SimWorld) -> void:
-	if not world.grid.is_passable(target_cell):
-		return
-	for unit_id: int in unit_ids:
-		var unit: SimUnit = world.get_unit(unit_id)
-		if unit == null or unit.team != team:
-			continue
-		unit.move_target = SimUnit.cell_center(target_cell)
-		unit.has_move_target = true
+	world.order_move(team, unit_ids, target_cell)

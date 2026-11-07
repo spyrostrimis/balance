@@ -1,7 +1,8 @@
 class_name RTSCamera
 extends Node3D
 ## Fixed-angle RTS camera. This node is the pivot on the ground (y = 0); the
-## Camera3D child sits behind and above it. Pan: WASD / arrows / screen edges.
+## Camera3D child sits behind and above it. Pan: WASD / arrows / screen edges /
+## middle-mouse drag (grab the map).
 ## Zoom: mouse wheel. The pivot is clamped to `bounds` (world XZ rect).
 
 @export var pitch_degrees: float = 55.0
@@ -23,6 +24,9 @@ var bounds: Rect2 = Rect2(0.0, 0.0, 64.0, 64.0)
 
 var camera: Camera3D
 var _distance: float = 0.0
+## Middle-mouse drag: the ground point that stays under the cursor.
+var _grabbing: bool = false
+var _grab_point: Vector3 = Vector3.ZERO
 var _target_distance: float = 0.0
 
 
@@ -40,8 +44,25 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	var motion: InputEventMouseMotion = event as InputEventMouseMotion
+	if motion != null:
+		if _grabbing:
+			_drag_to(motion.position)
+			get_viewport().set_input_as_handled()
+		return
 	var mb: InputEventMouseButton = event as InputEventMouseButton
-	if mb == null or not mb.pressed:
+	if mb == null:
+		return
+	if mb.button_index == MOUSE_BUTTON_MIDDLE:
+		_grabbing = mb.pressed
+		if mb.pressed:
+			var hit: Variant = _ground_point(mb.position)
+			_grabbing = hit != null
+			if _grabbing:
+				_grab_point = hit as Vector3
+		get_viewport().set_input_as_handled()
+		return
+	if not mb.pressed:
 		return
 	if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 		_target_distance = clampf(_target_distance / zoom_step, min_distance, max_distance)
@@ -53,7 +74,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	var dir: Vector2 = Input.get_vector("cam_left", "cam_right", "cam_up", "cam_down")
-	if edge_pan_enabled:
+	if edge_pan_enabled and not _grabbing:
 		dir += _edge_direction()
 	dir = dir.limit_length(1.0)
 	if dir != Vector2.ZERO:
@@ -72,6 +93,21 @@ func snap_to(pivot: Vector3, distance: float) -> void:
 	_distance = clampf(distance, min_distance, max_distance)
 	_target_distance = _distance
 	_apply_distance()
+
+
+## Moves the pivot so the grabbed ground point sits under the cursor again.
+func _drag_to(screen_pos: Vector2) -> void:
+	var hit: Variant = _ground_point(screen_pos)
+	if hit == null:
+		return
+	position += _grab_point - (hit as Vector3)
+	position = clamp_to_bounds(Vector3(position.x, 0.0, position.z), bounds)
+
+
+func _ground_point(screen_pos: Vector2) -> Variant:
+	var origin: Vector3 = camera.project_ray_origin(screen_pos)
+	var dir: Vector3 = camera.project_ray_normal(screen_pos)
+	return Plane(Vector3.UP, 0.0).intersects_ray(origin, dir)
 
 
 func get_distance() -> float:

@@ -65,7 +65,7 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 6
 theme_override_font_sizes/font_size = 22
-text = "Pan: WASD / arrows / screen edges   Zoom: mouse wheel   Full screen: F11 / Alt+Enter (Esc to leave)
+text = "Pan: WASD / arrows / screen edges / middle-drag   Zoom: mouse wheel   Full screen: F11 / Alt+Enter (Esc to leave)
 Select: left click / drag box (Shift adds)   Move: right click   Deselect: Esc"
 
 [node name="FpsLabel" type="Label" parent="UI"]
