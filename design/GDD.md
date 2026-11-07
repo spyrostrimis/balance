@@ -114,6 +114,36 @@ Implementation choices (proposal, easy to change):
   is still stuck after 3 seconds, it picks a new nearby spot once, then stops.
 - Ground units don't squeeze diagonally between two obstacles.
 
+## Combat
+Milestone 4. All rules and numbers below are **(proposal)** until you confirm them.
+- **Auto-attack:** idle units engage the nearest enemy within their *engage range*.
+  They walk into attack range and fire. They give up on that enemy if it gets
+  1.5 cells beyond the engage range.
+- **Move orders:** moving units don't shoot. They fight again once they arrive.
+- **Attack orders** (right-click an enemy): chase the target until it is in range,
+  then fire until it dies or is downed.
+- **Fighting back:** an idle unit that gets shot targets its attacker, even one
+  outside its range.
+- Units only fire while standing still (not between cells).
+- All shots in a tick land at the same time, so a mirrored 1v1 is a draw.
+- Range is measured centre to centre in cells. Rocks don't block shots yet
+  (no line of sight).
+- **Death:** troops at 0 HP die and free their cell. Heroes at 0 HP are **downed**:
+  they fall over, stay on their cell, can't act or be targeted, and show "DOWN".
+  The full downed rules (mission fail, warning, recovery unit) come in milestone 6.
+
+Placeholder stats (mirrored for both sides, in `data/units/`):
+
+| Unit | HP | Damage | Cooldown (s) | DPS | Range | Engage range | Speed |
+|------|----|--------|--------------|-----|-------|--------------|-------|
+| Leader | 400 | 20 | 1.0 | 20 | 4.0 | 6.5 | 2.2 |
+| Infantry | 120 | 10 | 1.0 | 10 | 3.5 | 6.0 | 2.0 |
+| Light vehicle | 220 | 24 | 1.6 | 15 | 4.5 | 7.0 | 3.0 |
+
+Observed in the self-test: Blue attacks Red's base and loses. The faster light
+vehicle arrives first and gets focused, so Blue fights 3 against 4. Group speed
+(units moving at the pace of the slowest) is an open question.
+
 ## Hazards and creatures
 - Like the Dune worms: creatures that roam and cause havoc. Different planets, different creatures —
   e.g. a pterodactyl or a huge lizard that eats harvesters, troops and civilians and can
@@ -155,3 +185,5 @@ Implementation choices (proposal, easy to change):
 - Mission 1 has no base: where does the enemy's recovery unit come from
   (enters from a map edge, arrives by dropship, …)?
 - Are the troops machines, people, or both? (Blue's "Repair" ability suggests machines.)
+- Should a group move at the speed of its slowest unit (formation speed)?
+- Should rocks and cliffs block shots (line of sight)?

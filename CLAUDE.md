@@ -92,11 +92,11 @@ stdout/stderr reach the terminal). In Git Bash: `/c/Godot/Godot_v4.7.2-stable_wi
   Saves `selftest_<n>.png` screenshots and `selftest.log` to
   `user://selftest/` and prints the absolute path. Optional `--shots=N` (default 3).
   Before each shot `App.selftest_shot` fires; the mission scene snaps the camera to
-  5 poses in turn (Blue mid-route, whole map, Red close-up, clamped corner, Blue
-  close-up), so use `--frames=500 --shots=5`. In self-test the sim runs exactly one
+  5 poses in turn (Blue on the way, the fight twice, whole map, aftermath), so use `--frames=500 --shots=5`. In self-test the sim runs exactly one
   tick per frame (deterministic). The mission scene selects all Blue units, checks
-  picking/box selection, and orders them round the west cliff spur. It logs whether
-  they end on distinct cells; scenes add log lines with `App.selftest_note()`.
+  picking/box selection, and orders an attack on the Red Leader. It logs each team's
+  units up/downed and HP per shot; scenes add log lines with `App.selftest_note()`.
+  Effects tweens run on real time, so a just-killed unit can still show in a shot.
   Use it after every view change to check scale, orientation and that meshes sit
   on the ground — then look at the PNGs.
 - Windows build: `godot --headless --path . --export-release "Windows Desktop" build/balance.exe`

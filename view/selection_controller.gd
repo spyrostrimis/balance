@@ -3,7 +3,8 @@ extends Control
 ## Player selection and orders. Full-screen overlay (ignores the mouse itself;
 ## reads unhandled input) that draws the drag box.
 ##   Left click unit: select it (Shift: add/remove).  Left click ground: clear.
-##   Left drag: box-select own units (Shift: add).  Right click: move order (units
+##   Left drag: box-select own units (Shift: add).
+##   Right click enemy: attack it (red marker).  Right click elsewhere: move (units
 ##   stop on the nearest free cells; red marker = the clicked cell itself is blocked).
 ##   Esc: clear selection.
 ## Orders go to the sim as commands; this node never changes sim state directly.
@@ -63,7 +64,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					click_select(mb.position, mb.shift_pressed)
 			get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
-			order_move_at(mb.position)
+			order_at(mb.position)
 			get_viewport().set_input_as_handled()
 		return
 	var motion: InputEventMouseMotion = event as InputEventMouseMotion
@@ -136,14 +137,44 @@ func set_selection(views: Array[UnitView]) -> void:
 	selection_changed.emit(_selected.size())
 
 
-## Closest own unit under the cursor (ray vs. a sphere around each model), or null.
-func unit_at(screen_pos: Vector2) -> UnitView:
+## Removes a unit view (unit died): from picking and from the selection.
+func remove_view(view: UnitView) -> void:
+	_views.erase(view)
+	if _selected.has(view):
+		_selected.erase(view)
+		selection_changed.emit(_selected.size())
+
+
+## Right click: on an enemy = attack it, anywhere else = move there.
+func order_at(screen_pos: Vector2) -> void:
+	if _selected.is_empty():
+		return
+	var enemy: UnitView = unit_at(screen_pos, false)
+	if enemy != null and enemy.unit.team != player_team and enemy.unit.can_act():
+		order_attack(enemy)
+	else:
+		order_move_at(screen_pos)
+
+
+func order_attack(target: UnitView) -> void:
+	if _selected.is_empty():
+		return
+	_show_marker(target.unit.cell(), false)
+	var ids: Array[int] = []
+	for view: UnitView in _selected:
+		ids.append(view.unit.id)
+	world.queue_command(AttackCommand.new(player_team, ids, target.unit.id))
+
+
+## Closest unit under the cursor (ray vs. a sphere around each model), or null.
+## `own_only`: only the player's units (selection); otherwise any unit (orders).
+func unit_at(screen_pos: Vector2, own_only: bool = true) -> UnitView:
 	var origin: Vector3 = camera.project_ray_origin(screen_pos)
 	var dir: Vector3 = camera.project_ray_normal(screen_pos)
 	var best: UnitView = null
 	var best_t: float = INF
 	for view: UnitView in _views:
-		if view.unit.team != player_team:
+		if own_only and view.unit.team != player_team:
 			continue
 		var center: Vector3 = view.pick_center()
 		var t: float = (center - origin).dot(dir)

@@ -1,7 +1,8 @@
 class_name UnitView
 extends Node3D
 ## Placeholder 3D model for one SimUnit: team-coloured primitives, a selection
-## ring, smooth interpolation between sim ticks and turning to face movement.
+## ring, smooth interpolation between sim ticks, turning to face movement or the
+## attack target, a death animation and a "downed" pose for heroes.
 ## Model forward is -Z.
 
 const TEAM_COLORS: Dictionary[SimUnit.Team, Color] = {
@@ -14,8 +15,12 @@ const RING_COLOR: Color = Color(0.3, 1.0, 0.35)
 const TURN_SPEED: float = 12.0
 const SILHOUETTE_SHADER: Shader = preload("res://view/shaders/occluded_silhouette.gdshader")
 const SILHOUETTE_ALPHA: float = 0.6
+const DEATH_SECONDS: float = 0.45
+const DOWNED_DARKEN: float = 0.45
 
 var unit: SimUnit
+## Read-only access to the sim (to face the attack target).
+var world: SimWorld
 ## Picking volume (world units): a sphere of this radius around the model's middle.
 var pick_radius: float = 0.8
 var pick_height: float = 1.4
@@ -28,11 +33,19 @@ var selected: bool = false:
 var _ring: MeshInstance3D
 var _ring_radius: float = 0.8
 var _silhouette: ShaderMaterial
+## Holds the model parts (not the ring), so the model can fall over on its own.
+var _model: Node3D
+var _materials: Array[StandardMaterial3D] = []
+var _dying: bool = false
 
 
-func setup(sim_unit: SimUnit) -> void:
+func setup(sim_unit: SimUnit, sim_world: SimWorld) -> void:
 	unit = sim_unit
+	world = sim_world
 	name = "Unit%d_%s" % [unit.id, unit.stats.id]
+	_model = Node3D.new()
+	_model.name = "Model"
+	add_child(_model)
 	var color: Color = TEAM_COLORS[unit.team]
 	_silhouette = ShaderMaterial.new()
 	_silhouette.shader = SILHOUETTE_SHADER
@@ -54,12 +67,50 @@ func setup(sim_unit: SimUnit) -> void:
 
 ## Places the model between the last two sim positions (alpha 0..1).
 func sync(alpha: float, delta: float) -> void:
+	if _dying:
+		return
 	var p: Vector2 = unit.prev_pos.lerp(unit.pos, alpha)
 	position = GridSpace.gridf_to_world(p)
-	var moved: Vector2 = unit.pos - unit.prev_pos
-	if moved.length_squared() > 1e-8 and delta > 0.0:
-		var target_yaw: float = atan2(-moved.x, -moved.y)
+	if unit.downed or delta <= 0.0:
+		return
+	var facing: Vector2 = unit.pos - unit.prev_pos
+	if facing.length_squared() <= 1e-8 and unit.attack_target_id != -1 and world != null:
+		var target: SimUnit = world.get_unit(unit.attack_target_id)
+		if target != null:
+			facing = target.pos - unit.pos
+	if facing.length_squared() > 1e-8:
+		var target_yaw: float = atan2(-facing.x, -facing.y)
 		rotation.y = lerp_angle(rotation.y, target_yaw, 1.0 - exp(-TURN_SPEED * delta))
+
+
+## Where shots start: chest height, a little in front of the model.
+func muzzle_point() -> Vector3:
+	var forward: Vector3 = -global_basis.z
+	return global_position + Vector3(0.0, pick_height * 0.55, 0.0) + forward * 0.6
+
+
+## Height above the ground for the health bar (world units).
+func bar_height() -> float:
+	return pick_height + 0.45
+
+
+## Troop died: sink and shrink, then free.
+func die() -> void:
+	_dying = true
+	selected = false
+	var tween: Tween = create_tween().set_parallel(true)
+	tween.tween_property(_model, "scale", Vector3(1.0, 0.1, 1.0), DEATH_SECONDS)
+	tween.tween_property(_model, "rotation:z", 0.6, DEATH_SECONDS)
+	tween.chain().tween_callback(queue_free)
+
+
+## Hero at 0 HP: falls over and greys out, stays on the map.
+func set_downed() -> void:
+	for mat: StandardMaterial3D in _materials:
+		mat.albedo_color = mat.albedo_color.darkened(DOWNED_DARKEN)
+	var tween: Tween = create_tween().set_parallel(true)
+	tween.tween_property(_model, "rotation:x", -PI * 0.47, 0.5).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(_model, "position:y", 0.45, 0.5)
 
 
 func pick_center() -> Vector3:
@@ -153,4 +204,5 @@ func _add_part(mesh: Mesh, color: Color, offset: Vector3) -> void:
 	mat.next_pass = _silhouette
 	part.material_override = mat
 	part.position = offset
-	add_child(part)
+	_materials.append(mat)
+	_model.add_child(part)

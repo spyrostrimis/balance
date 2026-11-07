@@ -13,3 +13,14 @@ extends Resource
 @export var move_speed: float = 2.0
 ## Footprint radius in cells (for collision/spacing later).
 @export var radius: float = 0.25
+
+@export_group("Combat")
+@export var max_hp: int = 100
+## Damage per shot.
+@export var attack_damage: int = 10
+## Attack range in cells (centre to centre).
+@export var attack_range: float = 3.5
+## Seconds between shots.
+@export var attack_cooldown: float = 1.0
+## Idle units engage enemies within this many cells (moving in to attack range).
+@export var acquire_range: float = 6.0

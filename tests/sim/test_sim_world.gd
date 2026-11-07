@@ -13,10 +13,12 @@ func before_test() -> void:
 	_ground = UnitStats.new()
 	_ground.id = &"test_ground"
 	_ground.move_speed = 3.0  # 0.2 cells per tick at 15 ticks/s
+	_ground.attack_range = 0.0  # no fighting in movement tests (see test_combat.gd)
 	_air = UnitStats.new()
 	_air.id = &"test_air"
 	_air.move_speed = 3.0
 	_air.is_air = true
+	_air.attack_range = 0.0
 
 
 func _world(rows: Array[String]) -> SimWorld:
@@ -353,12 +355,12 @@ func test_mission_01_whole_blue_team_crosses_the_map() -> void:
 	for unit: SimUnit in world.units:
 		if unit.team == BLUE:
 			blue.append(unit)
-	# Behind the north-east cliff spur, next to Red's start.
-	_move(world, BLUE, _ids(blue), Vector2i(22, 7))
+	# North-west, behind the north cliff spur (out of Red's range).
+	_move(world, BLUE, _ids(blue), Vector2i(12, 2))
 	_run(world, 450)  # 30 s
 	for unit: SimUnit in blue:
 		assert_bool(unit.is_moving()).override_failure_message("unit %d still moving" % unit.id).is_false()
-		var d: float = SimUnit.cell_center(unit.cell()).distance_to(SimUnit.cell_center(Vector2i(22, 7)))
+		var d: float = SimUnit.cell_center(unit.cell()).distance_to(SimUnit.cell_center(Vector2i(12, 2)))
 		assert_float(d).is_less_equal(2.0)
 
 
