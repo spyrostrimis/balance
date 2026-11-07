@@ -1,29 +1,58 @@
 extends Node3D
-## Placeholder main scene until milestone 1: a ground plane, a reference cube
-## sitting on it (1 cell = 2 world units) and a tilted RTS-style camera.
+## Mission 1 scene (milestone 1: map & camera). Loads the map data into the sim
+## grid, builds the 3D view and sets up the RTS camera.
 
-const GROUND_SIZE: float = 16.0
-const CUBE_SIZE: float = 2.0
+const MAP_PATH: String = "res://data/maps/mission_01.tres"
+## The camera pivot stays this far (world units) inside the map edge.
+const CAMERA_EDGE_INSET: float = 8.0
+
+@onready var map_view: MapView = $MapView
+@onready var rts_camera: RTSCamera = $RTSCamera
+@onready var fps_label: Label = $UI/FpsLabel
+
+var grid: MapGrid = MapGrid.new()
+var _fps_timer: float = 0.0
 
 
 func _ready() -> void:
-	var ground: MeshInstance3D = MeshInstance3D.new()
-	var plane: PlaneMesh = PlaneMesh.new()
-	plane.size = Vector2(GROUND_SIZE, GROUND_SIZE)
-	ground.mesh = plane
-	ground.material_override = _material(Color(0.45, 0.72, 0.35))
-	add_child(ground)
-
-	var cube: MeshInstance3D = MeshInstance3D.new()
-	var box: BoxMesh = BoxMesh.new()
-	box.size = Vector3.ONE * CUBE_SIZE
-	cube.mesh = box
-	cube.position = Vector3(0.0, CUBE_SIZE * 0.5, 0.0)  # bottom face on the ground
-	cube.material_override = _material(Color(0.2, 0.45, 1.0))
-	add_child(cube)
+	var layout: MapLayout = load(MAP_PATH) as MapLayout
+	var err: String = grid.load_layout(layout)
+	if err != "":
+		push_error("Failed to load %s: %s" % [MAP_PATH, err])
+		return
+	map_view.build(grid)
+	rts_camera.bounds = GridSpace.map_rect(grid.size()).grow(-CAMERA_EDGE_INSET)
+	rts_camera.snap_to(_spawn_center(grid.blue_spawns), rts_camera.start_distance)
+	if App.is_selftest:
+		rts_camera.edge_pan_enabled = false
+		App.selftest_shot.connect(_on_selftest_shot)
 
 
-func _material(color: Color) -> StandardMaterial3D:
-	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = color
-	return mat
+func _process(delta: float) -> void:
+	_fps_timer -= delta
+	if _fps_timer <= 0.0:
+		_fps_timer = 0.5
+		fps_label.text = "%d FPS" % Engine.get_frames_per_second()
+
+
+func _spawn_center(cells: Array[Vector2i]) -> Vector3:
+	if cells.is_empty():
+		return GridSpace.gridf_to_world(Vector2(grid.size()) * 0.5)
+	var sum: Vector2 = Vector2.ZERO
+	for cell: Vector2i in cells:
+		sum += Vector2(cell) + Vector2(0.5, 0.5)
+	return GridSpace.gridf_to_world(sum / cells.size())
+
+
+## Self-test camera poses: start view, whole map, Orichalcum close-up, clamped corner.
+func _on_selftest_shot(index: int, _total: int) -> void:
+	var map_center: Vector3 = GridSpace.gridf_to_world(Vector2(grid.size()) * 0.5)
+	match (index - 1) % 4:
+		0:
+			rts_camera.snap_to(_spawn_center(grid.blue_spawns), rts_camera.start_distance)
+		1:
+			rts_camera.snap_to(map_center, rts_camera.max_distance)
+		2:
+			rts_camera.snap_to(map_center, rts_camera.min_distance)
+		3:
+			rts_camera.snap_to(Vector3(1000.0, 0.0, -1000.0), rts_camera.start_distance)

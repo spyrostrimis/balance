@@ -8,6 +8,8 @@ extends Node
 const SELFTEST_DIR: String = "user://selftest"
 const DEFAULT_FRAMES: int = 120
 const DEFAULT_SHOTS: int = 3
+## Frames rendered between `selftest_shot` and the capture (lets shadows/cameras settle).
+const SHOT_SETTLE_FRAMES: int = 3
 
 
 ## Captures engine errors/warnings so the self-test can report them.
@@ -33,9 +35,18 @@ class ErrorCatcher extends Logger:
 var _catcher: ErrorCatcher = null
 
 
+## Emitted before each self-test screenshot (1-based), so a scene can pose its
+## camera. The shot is taken a few frames later.
+signal selftest_shot(index: int, total: int)
+
+## True while running in self-test mode.
+var is_selftest: bool = false
+
+
 func _ready() -> void:
 	var args: Dictionary = parse_user_args(OS.get_cmdline_user_args())
 	if args.has("selftest"):
+		is_selftest = true
 		_catcher = ErrorCatcher.new()
 		OS.add_logger(_catcher)
 		_run_selftest(int(args.get("frames", DEFAULT_FRAMES)), int(args.get("shots", DEFAULT_SHOTS)))
@@ -106,8 +117,11 @@ func _run_selftest(frames: int, shots: int) -> void:
 		await get_tree().process_frame
 		if frame in shot_frames:
 			shot_index += 1
+			selftest_shot.emit(shot_index, shots)
 			if headless:
 				continue
+			for _settle: int in SHOT_SETTLE_FRAMES:
+				await get_tree().process_frame
 			await RenderingServer.frame_post_draw
 			var image: Image = get_viewport().get_texture().get_image()
 			var path: String = abs_dir.path_join("selftest_%d.png" % shot_index)

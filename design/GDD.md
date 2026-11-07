@@ -107,6 +107,11 @@ Religious, mysterious fanatics. Like the Emperor's forces in Dune II.
 ### Mission 1 — "The Rock" (working name)
 - Purpose: teach the basics by playing.
 - Small map (32×32 cells). The Orichalcum rock is in the middle.
+- Map layout **(proposal)**: `data/maps/mission_01.tres`. Desert planet, cliff-walled.
+  Point-symmetric (each side sees the same map rotated 180°) for a fair fight. Blue
+  starts south-west, Red north-east. The 2×2 Orichalcum rock in the centre has four
+  boulder clusters around it with open approaches from N/S/E/W. Cliff spurs and
+  boulder groups split the field into a direct route and two flanks.
 - Player: Blue **(proposal)**. Enemy: Red, AI.
 - Each side: 4 units = 1 hero + 3 troops **(proposal: 2 infantry + 1 light vehicle,
   mirrored stats for v1 so the fight is fair)**.
