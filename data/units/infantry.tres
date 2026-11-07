@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="UnitStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://sim/unit_stats.gd" id="1_stats"]
+
+[resource]
+script = ExtResource("1_stats")
+id = &"infantry"
+display_name = "Infantry"
+is_hero = false
+move_speed = 2.0
+radius = 0.2

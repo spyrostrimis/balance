@@ -42,6 +42,13 @@ signal selftest_shot(index: int, total: int)
 ## True while running in self-test mode.
 var is_selftest: bool = false
 
+var _selftest_notes: PackedStringArray = PackedStringArray()
+
+
+## Adds a line to the self-test log (scenes report their own checks here).
+func selftest_note(text: String) -> void:
+	_selftest_notes.append(text)
+
 
 func _ready() -> void:
 	var args: Dictionary = parse_user_args(OS.get_cmdline_user_args())
@@ -143,6 +150,8 @@ func _run_selftest(frames: int, shots: int) -> void:
 	var elapsed_sec: float = float(Time.get_ticks_usec() - start_usec) / 1_000_000.0
 	log_lines.append("elapsed: %.2f s, avg fps: %.1f (includes screenshot stalls)" % [elapsed_sec,
 			float(frames) / maxf(elapsed_sec, 0.001)])
+	for note: String in _selftest_notes:
+		log_lines.append("note: " + note)
 	log_lines.append("errors: %d" % _catcher.errors.size())
 	for e: String in _catcher.errors:
 		log_lines.append("  ERROR: " + e)

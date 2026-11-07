@@ -88,8 +88,10 @@ stdout/stderr reach the terminal). In Git Bash: `/c/Godot/Godot_v4.7.2-stable_wi
   Saves `selftest_<n>.png` screenshots and `selftest.log` to
   `user://selftest/` and prints the absolute path. Optional `--shots=N` (default 3).
   Before each shot `App.selftest_shot` fires; the mission scene snaps the camera to
-  4 poses in turn (start view, whole map, Orichalcum close-up, clamped corner),
-  so use `--frames=160 --shots=4` to see all of them.
+  5 poses in turn (start view, Blue close-up, whole map, Red close-up, clamped corner),
+  so use `--frames=500 --shots=5`. The mission scene also selects all Blue units,
+  checks picking/box selection and orders a move; scenes add lines to the log with
+  `App.selftest_note()`.
   Use it after every view change to check scale, orientation and that meshes sit
   on the ground — then look at the PNGs.
 - Windows build: `godot --headless --path . --export-release "Windows Desktop" build/balance.exe`

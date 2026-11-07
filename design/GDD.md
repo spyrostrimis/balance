@@ -115,6 +115,9 @@ Religious, mysterious fanatics. Like the Emperor's forces in Dune II.
 - Player: Blue **(proposal)**. Enemy: Red, AI.
 - Each side: 4 units = 1 hero + 3 troops **(proposal: 2 infantry + 1 light vehicle,
   mirrored stats for v1 so the fight is fair)**.
+- Placeholder stats **(proposal)**, in `data/units/`: move speed (cells/s) hero 2.2,
+  infantry 2.0, light vehicle 3.0. Both sides use the same troops; the two Leaders
+  share stats until their abilities are added.
 - No base, no economy, no buildings.
 - Objective **(proposal)**: standing in the capture zone around the rock with no enemy
   units in it fills a capture bar; hold the rock for 60 seconds to win.
