@@ -24,3 +24,7 @@ extends Resource
 @export var attack_cooldown: float = 1.0
 ## Idle units engage enemies within this many cells (moving in to attack range).
 @export var acquire_range: float = 6.0
+
+@export_group("Abilities")
+## Hero abilities, in ability-bar order (actives and auras).
+@export var abilities: Array[AbilityStats] = []

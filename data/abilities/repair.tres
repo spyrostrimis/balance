@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="AbilityStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://sim/ability_stats.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"repair"
+display_name = "Repair"
+description = "Repairs a friendly unit, or the Leader itself."
+kind = 0
+effect = 0
+amount = 150.0
+target = 0
+cast_range = 5.0
+cooldown = 20.0

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="AbilityStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://sim/ability_stats.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"encouragement"
+display_name = "Encouragement"
+description = "Own units near the Leader take less damage."
+kind = 1
+effect = 3
+amount = 0.15
+aura_radius = 5.0
+aura_affects_self = false

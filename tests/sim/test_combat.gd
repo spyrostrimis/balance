@@ -88,10 +88,67 @@ func test_auto_target_is_dropped_when_it_runs_away() -> void:
 	_run(world, 1)
 	assert_int(blue.attack_target_id).is_equal(red.id)
 	world.queue_command(MoveCommand.new(RED, [red.id], Vector2i(15, 0)))
-	_run(world, 60)
+	_run(world, 90)
+	# Dropped it and walked back to its post.
 	assert_int(blue.attack_target_id).is_equal(-1)
 	assert_bool(blue.is_moving()).is_false()
-	assert_float(blue.pos.x).is_less(8.0)
+	assert_that(blue.cell()).is_equal(Vector2i(0, 0))
+
+
+func test_unit_returns_to_its_post_after_the_kill() -> void:
+	var world: SimWorld = _world(["................"])
+	var blue: SimUnit = world.spawn_unit(_soldier, BLUE, Vector2i(0, 0))
+	blue.hp = 1000
+	var dummy: UnitStats = _soldier.duplicate() as UnitStats
+	dummy.attack_range = 0.0
+	var red: SimUnit = world.spawn_unit(dummy, RED, Vector2i(4, 0))  # engage, not attack range
+	_run(world, 10)
+	assert_bool(blue.has_home).is_true()
+	assert_that(blue.home_cell).is_equal(Vector2i(0, 0))
+	assert_that(blue.cell()).is_not_equal(Vector2i(0, 0))  # walked in to fire
+	_run(world, 80)
+	assert_bool(red.dead).is_true()
+	assert_that(blue.cell()).is_equal(Vector2i(0, 0))
+	assert_bool(blue.is_moving()).is_false()
+
+
+func test_fast_attacker_cannot_drag_defenders_across_the_map() -> void:
+	var world: SimWorld = _world(["..............................."])
+	var raider_stats: UnitStats = _soldier.duplicate() as UnitStats
+	raider_stats.move_speed = 6.0
+	raider_stats.attack_range = 3.0
+	raider_stats.acquire_range = 0.0
+	var raider: SimUnit = world.spawn_unit(raider_stats, RED, Vector2i(3, 0))
+	raider.hp = 100000
+	var blue: SimUnit = world.spawn_unit(_soldier, BLUE, Vector2i(0, 0))
+	blue.hp = 1000
+	raider.attack_target_id = blue.id
+	raider.target_forced = true
+	_run(world, 1)  # the raider shoots once, blue fights back
+	assert_int(blue.attack_target_id).is_equal(raider.id)
+	world.queue_command(MoveCommand.new(RED, [raider.id], Vector2i(30, 0)))
+	_run(world, 150)
+	assert_int(blue.attack_target_id).is_equal(-1)
+	assert_that(blue.cell()).is_equal(Vector2i(0, 0))
+
+
+func test_player_order_clears_the_post() -> void:
+	var world: SimWorld = _world(["................", "................"])
+	var blue: SimUnit = world.spawn_unit(_soldier, BLUE, Vector2i(0, 0))
+	blue.hp = 1000
+	var dummy: UnitStats = _soldier.duplicate() as UnitStats
+	dummy.attack_range = 0.0
+	var red: SimUnit = world.spawn_unit(dummy, RED, Vector2i(4, 0))
+	red.hp = 10000
+	_run(world, 3)
+	assert_bool(blue.has_home).is_true()
+	world.queue_command(MoveCommand.new(BLUE, [blue.id], Vector2i(12, 1)))
+	_run(world, 1)
+	assert_bool(blue.has_home).is_false()
+	_run(world, 90)
+	# Stays where it was sent; it doesn't walk back to the old post.
+	assert_that(blue.cell()).is_equal(Vector2i(12, 1))
+	assert_bool(blue.has_home).is_false()
 
 
 func test_no_auto_attack_beyond_acquire_range_or_on_allies() -> void:

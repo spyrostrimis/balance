@@ -12,13 +12,21 @@ extends RefCounted
 ##   nearest free reachable cells (ties broken towards the group), then paths there.
 ##
 ## Combat rules (design/GDD.md -> Combat), resolved simultaneously each tick:
-## - Idle units engage the nearest enemy within acquire range (moving in to attack
-##   range) and give up if it gets more than LEASH cells beyond that.
+## - Idle units engage the nearest enemy they can see within acquire range
+##   (moving in to attack range). They remember their post and walk back to it
+##   when the enemy gets more than LEASH cells beyond that (measured from the
+##   post) or is gone.
+## - Rocks and cliffs block shots and sight (line of sight); units don't.
 ## - Units with a move order don't attack until they arrive.
-## - An attack order chases the target until in range, then fires until it dies.
+## - An attack order chases the target until in range and in sight, then fires
+##   until it dies.
 ## - An idle unit that gets shot fights back (chasing the attacker if needed).
 ## - Units only fire while standing still (not between cells).
 ## - At 0 HP troops die; heroes are downed instead (stay on the map, inactive).
+##
+## Hero abilities (design/GDD.md -> Heroes): an active ability walks the hero into
+## range and sight of its target, then fires and cools down. Auras modify the
+## damage dealt / taken by own units nearby while the hero is up.
 
 const TICKS_PER_SECOND: int = 15
 const TICK_SECONDS: float = 1.0 / TICKS_PER_SECOND
@@ -108,6 +116,9 @@ func step() -> void:
 	events.clear()
 	for unit: SimUnit in units:
 		unit.prev_pos = unit.pos
+		for i: int in unit.ability_cooldowns.size():
+			if unit.ability_cooldowns[i] > 0:
+				unit.ability_cooldowns[i] -= 1
 	var commands: Array[SimCommand] = _pending
 	_pending = []
 	for command: SimCommand in commands:
@@ -119,7 +130,8 @@ func step() -> void:
 	for unit: SimUnit in units:
 		if unit.can_act():
 			_move(unit)
-	_resolve_attacks()
+	_update_auras()
+	_resolve_combat()
 
 
 ## Orders units of `team` towards `target` (called by MoveCommand on a tick).
@@ -134,6 +146,8 @@ func order_move(team: SimUnit.Team, unit_ids: Array[int], target: Vector2i) -> v
 	for unit: SimUnit in group:
 		unit.attack_target_id = -1
 		unit.target_forced = false
+		unit.has_home = false
+		_cancel_cast(unit)
 	target = Vector2i(clampi(target.x, 0, grid.width - 1), clampi(target.y, 0, grid.height - 1))
 	for unit: SimUnit in group:
 		_clear_destination(unit)
@@ -156,21 +170,123 @@ func order_attack(team: SimUnit.Team, unit_ids: Array[int], target_id: int) -> v
 		var unit: SimUnit = get_unit(unit_id)
 		if unit == null or unit.team != team or not unit.can_act() or not unit.can_attack():
 			continue
+		_cancel_cast(unit)
 		unit.attack_target_id = target_id
 		unit.target_forced = true
+		unit.has_home = false
 		unit.chase_timer = 0
 		unit.chase_cell = Vector2i(-1, -1)
+
+
+## Orders a hero to use an active ability on a unit (called by AbilityCommand).
+## Ignored if the ability isn't ready or the target isn't valid for it.
+func order_ability(team: SimUnit.Team, unit_id: int, index: int, target_id: int) -> void:
+	var unit: SimUnit = get_unit(unit_id)
+	if unit == null or unit.team != team or not unit.can_act():
+		return
+	var ability: AbilityStats = unit.ability(index)
+	if ability == null or not ability.is_active() or not unit.ability_ready(index):
+		return
+	if not is_valid_cast_target(unit, ability, get_unit(target_id)):
+		return
+	_cancel_cast(unit)
+	unit.attack_target_id = -1
+	unit.target_forced = false
+	unit.has_home = false
+	unit.cast_index = index
+	unit.cast_target_id = target_id
+	unit.chase_timer = 0
+	unit.chase_cell = Vector2i(-1, -1)
+	_clear_destination(unit)
+	unit.path.clear()
+
+
+func is_valid_cast_target(unit: SimUnit, ability: AbilityStats, target: SimUnit) -> bool:
+	if target == null or not target.can_act():
+		return false
+	if ability.target == AbilityStats.Target.ALLY:
+		return target.team == unit.team
+	return target.team != unit.team
+
+
+## True if nothing blocks the straight line between two positions (cell units).
+## Walks every cell the line touches (endpoints excluded). A line through an exact
+## corner is blocked only if both cells beside the corner block.
+func has_line_of_sight(from: Vector2, to: Vector2) -> bool:
+	var cell: Vector2i = Vector2i(floori(from.x), floori(from.y))
+	var end: Vector2i = Vector2i(floori(to.x), floori(to.y))
+	var d: Vector2 = to - from
+	var step_x: int = 1 if d.x > 0.0 else -1
+	var step_y: int = 1 if d.y > 0.0 else -1
+	var t_delta_x: float = absf(1.0 / d.x) if absf(d.x) > EPSILON else INF
+	var t_delta_y: float = absf(1.0 / d.y) if absf(d.y) > EPSILON else INF
+	var t_max_x: float = INF
+	if absf(d.x) > EPSILON:
+		t_max_x = ((cell.x + 1.0 - from.x) if d.x > 0.0 else (from.x - cell.x)) * t_delta_x
+	var t_max_y: float = INF
+	if absf(d.y) > EPSILON:
+		t_max_y = ((cell.y + 1.0 - from.y) if d.y > 0.0 else (from.y - cell.y)) * t_delta_y
+	var guard: int = absi(end.x - cell.x) + absi(end.y - cell.y) + 2
+	while cell != end and guard > 0:
+		guard -= 1
+		if absf(t_max_x - t_max_y) <= 1e-9:
+			if grid.blocks_sight(Vector2i(cell.x + step_x, cell.y)) \
+					and grid.blocks_sight(Vector2i(cell.x, cell.y + step_y)):
+				return false
+			cell += Vector2i(step_x, step_y)
+			t_max_x += t_delta_x
+			t_max_y += t_delta_y
+		elif t_max_x < t_max_y:
+			cell.x += step_x
+			t_max_x += t_delta_x
+		else:
+			cell.y += step_y
+			t_max_y += t_delta_y
+		if cell != end and grid.blocks_sight(cell):
+			return false
+	return true
+
+
+## Sight between two units. Air units see and shoot over terrain.
+func can_see(unit: SimUnit, other: SimUnit) -> bool:
+	if unit.is_air() or other.is_air():
+		return true
+	return has_line_of_sight(unit.pos, other.pos)
+
+
+## In attack range and in sight.
+func can_hit(unit: SimUnit, target: SimUnit) -> bool:
+	return in_attack_range(unit, target) and can_see(unit, target)
 
 
 func in_attack_range(unit: SimUnit, target: SimUnit) -> bool:
 	return unit.pos.distance_to(target.pos) <= unit.stats.attack_range + EPSILON
 
 
+## Casting: the ability's target is in range and sight. Otherwise: the attack
+## target can be hit.
 func _target_in_range(unit: SimUnit) -> bool:
+	var target: SimUnit = _engaged_target(unit)
+	return target != null and _in_reach(unit, target)
+
+
+## The unit the unit is walking to: its cast target, else its attack target.
+func _engaged_target(unit: SimUnit) -> SimUnit:
+	if unit.is_casting():
+		var cast_target: SimUnit = get_unit(unit.cast_target_id)
+		var ability: AbilityStats = unit.ability(unit.cast_index)
+		return cast_target if is_valid_cast_target(unit, ability, cast_target) else null
 	if unit.attack_target_id == -1:
-		return false
+		return null
 	var target: SimUnit = get_unit(unit.attack_target_id)
-	return _is_valid_target(unit, target) and in_attack_range(unit, target)
+	return target if _is_valid_target(unit, target) else null
+
+
+func _in_reach(unit: SimUnit, target: SimUnit) -> bool:
+	if unit.is_casting():
+		var ability: AbilityStats = unit.ability(unit.cast_index)
+		return unit.pos.distance_to(target.pos) <= ability.cast_range + EPSILON and can_see(unit, target)
+	return can_hit(unit, target)
 
 
 func _is_valid_target(unit: SimUnit, target: SimUnit) -> bool:
@@ -178,11 +294,16 @@ func _is_valid_target(unit: SimUnit, target: SimUnit) -> bool:
 
 
 func _update_target(unit: SimUnit) -> void:
+	if unit.is_casting():
+		if _engaged_target(unit) == null:
+			_cancel_cast(unit)  # target gone or downed
+		else:
+			return
 	if unit.attack_target_id != -1:
 		var target: SimUnit = get_unit(unit.attack_target_id)
 		var lost: bool = not _is_valid_target(unit, target)
-		if not lost and not unit.target_forced:
-			lost = unit.pos.distance_to(target.pos) > unit.stats.acquire_range + LEASH
+		if not lost and not unit.target_forced and unit.has_home:
+			lost = SimUnit.cell_center(unit.home_cell).distance_to(target.pos) > unit.leash_radius + EPSILON
 		if lost:
 			unit.attack_target_id = -1
 			unit.target_forced = false
@@ -191,16 +312,58 @@ func _update_target(unit: SimUnit) -> void:
 	if unit.attack_target_id == -1 and not unit.is_moving() and unit.can_attack():
 		var nearest: SimUnit = _nearest_enemy_within(unit, maxf(unit.stats.acquire_range, unit.stats.attack_range))
 		if nearest != null:
+			if not unit.has_home:
+				_set_home(unit, unit.stats.acquire_range + LEASH)
 			unit.attack_target_id = nearest.id
 			unit.target_forced = false
 			unit.chase_timer = 0
+		elif unit.has_home:
+			_return_home(unit)
 
 
+func _set_home(unit: SimUnit, radius: float) -> void:
+	unit.has_home = true
+	unit.home_cell = unit.occupied_cell
+	unit.leash_radius = radius
+
+
+## Nothing left to fight: walk back to the post (a plain move; it fights again
+## once it's there and idle).
+func _return_home(unit: SimUnit) -> void:
+	unit.has_home = false
+	if unit.occupied_cell == unit.home_cell:
+		return
+	unit.order_target = unit.home_cell
+	unit.retargeted = false
+	unit.blocked_ticks = 0
+	unit.path.clear()
+	var group: Array[SimUnit] = [unit]
+	var stops: Dictionary[int, Vector2i] = _assign_stops(group, unit.home_cell)
+	if stops.has(unit.id) and stops[unit.id] != unit.occupied_cell:
+		_set_destination(unit, stops[unit.id])
+
+
+func _cancel_cast(unit: SimUnit) -> void:
+	if not unit.is_casting():
+		return
+	unit.cast_index = -1
+	unit.cast_target_id = -1
+	_clear_destination(unit)
+	unit.path.clear()
+
+
+## Nearest enemy in sight within `max_dist` (and within the leash of the unit's
+## post, if it has one). Ties go to the lower id.
 func _nearest_enemy_within(unit: SimUnit, max_dist: float) -> SimUnit:
 	var best: SimUnit = null
 	var best_dist: float = INF
+	var home: Vector2 = SimUnit.cell_center(unit.home_cell)
 	for other: SimUnit in units:
 		if not _is_valid_target(unit, other) or unit.pos.distance_to(other.pos) > max_dist + EPSILON:
+			continue
+		if unit.has_home and home.distance_to(other.pos) > unit.leash_radius + EPSILON:
+			continue
+		if not can_see(unit, other):
 			continue
 		var d: float = unit.pos.distance_to(other.pos)
 		if best == null or d < best_dist - EPSILON or (absf(d - best_dist) <= EPSILON and other.id < best.id):
@@ -209,12 +372,13 @@ func _nearest_enemy_within(unit: SimUnit, max_dist: float) -> SimUnit:
 	return best
 
 
-## Walks towards the attack target until in range, re-planning as it moves.
+## Walks towards the cast or attack target until it is in reach (range and
+## sight), re-planning as it moves.
 func _chase(unit: SimUnit) -> void:
-	if unit.attack_target_id == -1:
+	var target: SimUnit = _engaged_target(unit)
+	if target == null:
 		return
-	var target: SimUnit = get_unit(unit.attack_target_id)
-	if in_attack_range(unit, target):
+	if _in_reach(unit, target):
 		if unit.has_destination or not unit.path.is_empty():
 			unit.path.clear()  # finish the current step, then stop and fire
 			_clear_destination(unit)
@@ -237,11 +401,81 @@ func _chase(unit: SimUnit) -> void:
 		_set_destination(unit, stops[unit.id])
 
 
-## All shots in a tick happen at once, then damage, then deaths: a mirrored 1v1
-## is a draw, not decided by list order.
-func _resolve_attacks() -> void:
-	var shooters: Array[SimUnit] = []
-	var targets: Array[SimUnit] = []
+## Aura effects for this tick, from every hero that is up.
+## The same effect from several auras doesn't stack (the strongest counts).
+func _update_auras() -> void:
+	for unit: SimUnit in units:
+		unit.aura_damage_bonus = 0.0
+		unit.aura_damage_reduction = 0.0
+	for source: SimUnit in units:
+		if not source.can_act():
+			continue
+		for ability: AbilityStats in source.stats.abilities:
+			if ability == null or ability.kind != AbilityStats.Kind.AURA:
+				continue
+			for unit: SimUnit in units:
+				if unit.team != source.team or not unit.can_act():
+					continue
+				if unit == source and not ability.aura_affects_self:
+					continue
+				if source.pos.distance_to(unit.pos) > ability.aura_radius + EPSILON:
+					continue
+				match ability.effect:
+					AbilityStats.Effect.DAMAGE_BONUS:
+						unit.aura_damage_bonus = maxf(unit.aura_damage_bonus, ability.amount)
+					AbilityStats.Effect.DAMAGE_REDUCTION:
+						unit.aura_damage_reduction = maxf(unit.aura_damage_reduction, ability.amount)
+
+
+## Damage after the attacker's and the target's aura effects, in whole HP.
+static func final_damage(attacker: SimUnit, target: SimUnit, base: float) -> int:
+	if base <= 0.0:
+		return 0
+	var scaled: float = base * (1.0 + attacker.aura_damage_bonus) * (1.0 - target.aura_damage_reduction)
+	return maxi(1, roundi(scaled))
+
+
+## Abilities, then shots, are all decided first; then damage lands; then deaths.
+## So everything in a tick happens at once: a mirrored 1v1 is a draw, not decided
+## by list order.
+func _resolve_combat() -> void:
+	var hit_from: Array[SimUnit] = []
+	var hit_to: Array[SimUnit] = []
+	var hit_base: Array[float] = []
+	var hit_is_shot: Array[bool] = []
+
+	for unit: SimUnit in units:
+		if not unit.can_act() or not unit.is_casting() or unit.stepping:
+			continue
+		var target: SimUnit = _engaged_target(unit)
+		if target == null or not _in_reach(unit, target):
+			continue
+		var index: int = unit.cast_index
+		var ability: AbilityStats = unit.ability(index)
+		match ability.effect:
+			AbilityStats.Effect.HEAL:
+				var healed: int = mini(roundi(ability.amount), target.stats.max_hp - target.hp)
+				target.hp += maxi(healed, 0)
+				events.append(CombatEvent.new(CombatEvent.Kind.ABILITY, unit.id, target.id, maxi(healed, 0), index))
+			AbilityStats.Effect.DAMAGE:
+				events.append(CombatEvent.new(CombatEvent.Kind.ABILITY, unit.id, target.id,
+						final_damage(unit, target, ability.amount), index))
+				hit_from.append(unit)
+				hit_to.append(target)
+				hit_base.append(ability.amount)
+				hit_is_shot.append(false)
+				for other: SimUnit in units:
+					if other == target or not _is_valid_target(unit, other):
+						continue
+					if other.pos.distance_to(target.pos) <= ability.splash_radius + EPSILON:
+						hit_from.append(unit)
+						hit_to.append(other)
+						hit_base.append(ability.amount * ability.splash_fraction)
+						hit_is_shot.append(false)
+		unit.ability_cooldowns[index] = ability.cooldown_ticks(TICKS_PER_SECOND)
+		unit.cast_index = -1
+		unit.cast_target_id = -1
+
 	for unit: SimUnit in units:
 		if not unit.can_act():
 			continue
@@ -250,24 +484,24 @@ func _resolve_attacks() -> void:
 		if unit.attack_target_id == -1 or unit.stepping or unit.cooldown_left > 0:
 			continue
 		var target: SimUnit = get_unit(unit.attack_target_id)
-		if not _is_valid_target(unit, target) or not in_attack_range(unit, target):
+		if not _is_valid_target(unit, target) or not can_hit(unit, target):
 			continue
-		shooters.append(unit)
-		targets.append(target)
+		hit_from.append(unit)
+		hit_to.append(target)
+		hit_base.append(float(unit.stats.attack_damage))
+		hit_is_shot.append(true)
 		unit.cooldown_left = maxi(1, roundi(unit.stats.attack_cooldown * TICKS_PER_SECOND))
 
 	var last_hit_by: Dictionary[int, int] = {}
-	for i: int in shooters.size():
-		var shooter: SimUnit = shooters[i]
-		var target: SimUnit = targets[i]
-		target.hp = maxi(target.hp - shooter.stats.attack_damage, 0)
-		last_hit_by[target.id] = shooter.id
-		events.append(CombatEvent.new(CombatEvent.Kind.SHOT, shooter.id, target.id, shooter.stats.attack_damage))
-		# Fight back when shot while idle.
-		if target.attack_target_id == -1 and not target.is_moving() and target.can_attack():
-			target.attack_target_id = shooter.id
-			target.target_forced = true
-			target.chase_timer = 0
+	for i: int in hit_from.size():
+		var attacker: SimUnit = hit_from[i]
+		var target: SimUnit = hit_to[i]
+		var damage: int = final_damage(attacker, target, hit_base[i])
+		target.hp = maxi(target.hp - damage, 0)
+		last_hit_by[target.id] = attacker.id
+		if hit_is_shot[i]:
+			events.append(CombatEvent.new(CombatEvent.Kind.SHOT, attacker.id, target.id, damage))
+		_fight_back(target, attacker)
 
 	for unit: SimUnit in units.duplicate():
 		if unit.hp > 0 or not unit.can_act():
@@ -281,10 +515,31 @@ func _resolve_attacks() -> void:
 			events.append(CombatEvent.new(CombatEvent.Kind.DIED, unit.id, killer))
 
 
+## An idle unit that gets hit targets its attacker. It keeps a post like an
+## auto-engage, with the leash wide enough to reach the attacker.
+func _fight_back(unit: SimUnit, attacker: SimUnit) -> void:
+	if unit.attack_target_id != -1 or unit.is_moving() or unit.is_casting() or not unit.can_attack():
+		return
+	if not unit.can_act() or unit.hp <= 0:
+		return
+	var reach: float = maxf(unit.stats.acquire_range, unit.pos.distance_to(attacker.pos)) + LEASH
+	if unit.has_home:
+		var from_home: float = SimUnit.cell_center(unit.home_cell).distance_to(attacker.pos) + LEASH
+		unit.leash_radius = maxf(unit.leash_radius, from_home)
+	else:
+		_set_home(unit, reach)
+	unit.attack_target_id = attacker.id
+	unit.target_forced = false
+	unit.chase_timer = 0
+
+
 ## Hero at 0 HP: stays where it is (still holding its cell), does nothing.
 func _down(unit: SimUnit) -> void:
 	unit.downed = true
 	unit.attack_target_id = -1
+	unit.cast_index = -1
+	unit.cast_target_id = -1
+	unit.has_home = false
 	unit.path.clear()
 	_clear_destination(unit)
 	if unit.stepping:

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="AbilityStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://sim/ability_stats.gd" id="1_ability"]
+
+[resource]
+script = ExtResource("1_ability")
+id = &"heavy_cannon"
+display_name = "Heavy Cannon"
+description = "A heavy shell that also hits enemies next to the target."
+kind = 0
+effect = 1
+amount = 100.0
+target = 1
+cast_range = 6.0
+cooldown = 15.0
+splash_radius = 1.5
+splash_fraction = 0.5

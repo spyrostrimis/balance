@@ -1,6 +1,9 @@
-[gd_resource type="Resource" script_class="UnitStats" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="UnitStats" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://sim/unit_stats.gd" id="1_stats"]
+[ext_resource type="Script" path="res://sim/ability_stats.gd" id="4_ability"]
+[ext_resource type="Resource" path="res://data/abilities/heavy_cannon.tres" id="2_active"]
+[ext_resource type="Resource" path="res://data/abilities/dominion.tres" id="3_passive"]
 
 [resource]
 script = ExtResource("1_stats")
@@ -14,3 +17,4 @@ attack_damage = 20
 attack_range = 4.0
 attack_cooldown = 1.0
 acquire_range = 6.5
+abilities = Array[ExtResource("4_ability")]([ExtResource("2_active"), ExtResource("3_passive")])

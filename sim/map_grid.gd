@@ -84,6 +84,11 @@ func is_passable(cell: Vector2i) -> bool:
 	return terrain_at(cell) == Terrain.GROUND
 
 
+## Rocks, cliffs and the Orichalcum rock block shots and sight (outside the map too).
+func blocks_sight(cell: Vector2i) -> bool:
+	return terrain_at(cell) != Terrain.GROUND
+
+
 func _reset() -> void:
 	width = 0
 	height = 0

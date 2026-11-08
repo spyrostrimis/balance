@@ -43,6 +43,22 @@ var cooldown_left: int = 0
 var chase_cell: Vector2i = Vector2i(-1, -1)
 var chase_timer: int = 0
 
+## Post: where the unit stood when it engaged on its own (it walks back there
+## when the enemy gets away or is gone). Cleared by player orders.
+var has_home: bool = false
+var home_cell: Vector2i = Vector2i.ZERO
+## The enemy is dropped when it gets further than this from the post (cells).
+var leash_radius: float = 0.0
+
+## Ticks until each ability (same index as stats.abilities) can be used again.
+var ability_cooldowns: Array[int] = []
+## Ability being cast (walking into range first), or -1, and its target.
+var cast_index: int = -1
+var cast_target_id: int = -1
+## Aura effects on this unit this tick (fractions: 0.1 = 10%).
+var aura_damage_bonus: float = 0.0
+var aura_damage_reduction: float = 0.0
+
 
 func _init(unit_id: int, unit_team: Team, unit_stats: UnitStats, start_cell: Vector2i) -> void:
 	id = unit_id
@@ -52,6 +68,8 @@ func _init(unit_id: int, unit_team: Team, unit_stats: UnitStats, start_cell: Vec
 	pos = cell_center(start_cell)
 	prev_pos = pos
 	hp = stats.max_hp
+	ability_cooldowns.resize(stats.abilities.size())
+	ability_cooldowns.fill(0)
 
 
 func cell() -> Vector2i:
@@ -74,6 +92,28 @@ func can_act() -> bool:
 ## Has a weapon (range and damage above zero). Unarmed units never pick targets.
 func can_attack() -> bool:
 	return stats.attack_range > 0.0 and stats.attack_damage > 0
+
+
+func ability(index: int) -> AbilityStats:
+	if index < 0 or index >= stats.abilities.size():
+		return null
+	return stats.abilities[index]
+
+
+func ability_ready(index: int) -> bool:
+	return ability(index) != null and ability_cooldowns[index] <= 0
+
+
+## 0 = ready, 1 = just used.
+func ability_cooldown_fraction(index: int, ticks_per_second: int) -> float:
+	var stats_ability: AbilityStats = ability(index)
+	if stats_ability == null or not stats_ability.is_active():
+		return 0.0
+	return clampf(float(ability_cooldowns[index]) / float(stats_ability.cooldown_ticks(ticks_per_second)), 0.0, 1.0)
+
+
+func is_casting() -> bool:
+	return cast_index != -1
 
 
 func hp_fraction() -> float:

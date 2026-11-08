@@ -78,7 +78,9 @@ Religious, mysterious fanatics. Like the Emperor's forces in Dune II.
     The Palatinate may recover their leader by stranger means **(proposal)**.
 - **Fairness requirements:**
   - Low-HP warning: alert, pulsing portrait, sound.
-  - Every hero has an escape option: self-repair, retreat or recall **(proposal: which one per hero)**.
+  - Every hero has an escape option: self-repair, retreat or recall.
+  - Decided: **every AI-controlled hero escapes when its HP reaches zero** (it is
+    downed and taken off the field; the details are milestone 6, see "Downed enemy hero").
 - **Downed enemy hero:**
   - Loses its aura and abilities while down — that's the window to push.
   - A recovery unit comes, picks up the hero and carries it home.
@@ -90,9 +92,33 @@ Religious, mysterious fanatics. Like the Emperor's forces in Dune II.
 - **Blue Leader:** Repair (active — heals a friendly unit, can target self, which is the
   escape option); Encouragement (passive aura — bonuses to nearby troops).
 - **Red Leader:** Heavy Cannon (active — a powerful weapon, working name, inspired by
-  Megatron's but not copied); passive **(proposal: e.g. "Ruthless" — bonus damage
-  against damaged units)**; escape option **(proposal)**.
-  ⚠ Passive and escape option need a decision before milestone 5.
+  Megatron's but not copied); passive aura (decided): **his army within 5 cells
+  deals 10% more attack damage**. Working name "Dominion" **(proposal)**.
+  Escape: decided, see the AI hero rule above.
+
+Rules (milestone 5):
+- Active abilities target a unit: the hero walks until the target is in ability
+  range and in sight, then uses it. A move or attack order cancels it.
+- After use the ability cools down; it can't be used again until the cooldown ends.
+- Auras work all the time while the hero is up. A downed hero has no aura and
+  can't use abilities.
+- Auras affect the hero's own units within the radius, not the hero itself
+  **(proposal)**. Two copies of the same aura don't stack (only matters later).
+- Damage after bonuses is rounded to whole HP (infantry 10 → 11 with Red's aura).
+
+Ability numbers (in `data/abilities/`):
+
+| Ability | Hero | Type | Effect | Range / radius | Cooldown |
+|---------|------|------|--------|----------------|----------|
+| Repair | Blue | active, friendly unit or self | heals 150 HP **(proposal)** | 5 cells **(proposal)** | 20 s **(proposal)** |
+| Encouragement | Blue | passive aura | own units take 15% less damage **(proposal)** | 5 cells **(proposal)** | — |
+| Heavy Cannon | Red | active, enemy unit | 100 damage, plus 50% to other enemies within 1.5 cells of the target **(proposal)** | 6 cells **(proposal)** | 15 s **(proposal)** |
+| Dominion | Red | passive aura | own units deal 10% more attack damage | 5 cells | — |
+
+Controls: the hero's portrait and ability bar sit bottom-left. **Q** (or clicking
+the button) starts targeting the active ability; left-click the target (for Repair,
+clicking the portrait targets the hero itself); right-click or Esc cancels. Until
+the enemy AI exists (milestone 7), the Red Leader only uses its aura.
 
 ## Movement
 Decided (playtest feedback after milestone 2):
@@ -115,24 +141,35 @@ Implementation choices (proposal, easy to change):
 - Ground units don't squeeze diagonally between two obstacles.
 
 ## Combat
-Milestone 4. All rules and numbers below are **(proposal)** until you confirm them.
-- **Auto-attack:** idle units engage the nearest enemy within their *engage range*.
-  They walk into attack range and fire. They give up on that enemy if it gets
-  1.5 cells beyond the engage range.
+Milestone 4, rules and stats confirmed after playtest (they will be tuned later).
+- **Auto-attack:** idle units engage the nearest enemy they can see within their
+  *engage range*. They walk into attack range and fire.
+- **Return to post (decided):** a unit that engaged on its own remembers where it
+  stood. If the enemy gets more than 1.5 cells beyond the engage range *from that
+  spot*, the unit drops it and walks back. It also walks back when its enemy is
+  gone and no other enemy is in reach. So a fast unit can't drag defenders across
+  the map. While walking back it doesn't fight. A player order cancels this
+  (the unit's post becomes wherever it is next left idle).
 - **Move orders:** moving units don't shoot. They fight again once they arrive.
 - **Attack orders** (right-click an enemy): chase the target until it is in range,
   then fire until it dies or is downed.
 - **Fighting back:** an idle unit that gets shot targets its attacker, even one
-  outside its range.
+  outside its range. It gives up the same way (1.5 cells beyond the attacker's
+  distance or its engage range, whichever is larger, measured from its post).
 - Units only fire while standing still (not between cells).
 - All shots in a tick land at the same time, so a mirrored 1v1 is a draw.
-- Range is measured centre to centre in cells. Rocks don't block shots yet
-  (no line of sight).
+- Range is measured centre to centre in cells.
+- **Line of sight (decided):** rocks, cliffs and the Orichalcum rock block shots and
+  sight (later also trees, walls and buildings). Units don't block shots. A unit
+  without a clear line walks until it has one. A line passing exactly through a
+  corner is blocked only if both cells beside the corner block **(proposal)**.
+  Shots to or from air units ignore terrain **(proposal; no air units yet)**.
+- **Group speed (decided):** every unit moves at its own speed, no formation speed.
 - **Death:** troops at 0 HP die and free their cell. Heroes at 0 HP are **downed**:
   they fall over, stay on their cell, can't act or be targeted, and show "DOWN".
   The full downed rules (mission fail, warning, recovery unit) come in milestone 6.
 
-Placeholder stats (mirrored for both sides, in `data/units/`):
+Stats (mirrored for both sides, in `data/units/`):
 
 | Unit | HP | Damage | Cooldown (s) | DPS | Range | Engage range | Speed |
 |------|----|--------|--------------|-----|-------|--------------|-------|
@@ -140,9 +177,8 @@ Placeholder stats (mirrored for both sides, in `data/units/`):
 | Infantry | 120 | 10 | 1.0 | 10 | 3.5 | 6.0 | 2.0 |
 | Light vehicle | 220 | 24 | 1.6 | 15 | 4.5 | 7.0 | 3.0 |
 
-Observed in the self-test: Blue attacks Red's base and loses. The faster light
-vehicle arrives first and gets focused, so Blue fights 3 against 4. Group speed
-(units moving at the pace of the slowest) is an open question.
+Later: **patrols** — troops patrolling an area; when they spot an enemy within
+engage range they raise the alarm (e.g. call nearby units).
 
 ## Hazards and creatures
 - Like the Dune worms: creatures that roam and cause havoc. Different planets, different creatures —
@@ -181,9 +217,7 @@ vehicle arrives first and gets focused, so Blue fights 3 against 4. Group speed
 - ~~Working title of the game.~~ **Answered: Balance.**
 - Unit roster per faction beyond Mission 1.
 - Recovery unit: what happens if it's destroyed (longer downtime vs out for the mission).
-- Red Leader's passive and escape option. **Needs a decision before milestone 5.**
 - Mission 1 has no base: where does the enemy's recovery unit come from
   (enters from a map edge, arrives by dropship, …)?
 - Are the troops machines, people, or both? (Blue's "Repair" ability suggests machines.)
-- Should a group move at the speed of its slowest unit (formation speed)?
-- Should rocks and cliffs block shots (line of sight)?
+
