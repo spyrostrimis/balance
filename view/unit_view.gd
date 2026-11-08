@@ -68,6 +68,7 @@ var _current_anim: StringName = &""
 var _action_left: float = 0.0
 ## Death / downed pose: no more idle or walk.
 var _posed: bool = false
+var _dust: GPUParticles3D
 
 
 func setup(sim_unit: SimUnit, sim_world: SimWorld) -> void:
@@ -149,6 +150,17 @@ func _build_from_visual(visual: UnitVisual, color: Color) -> void:
 			if _anim_names.has(key):
 				_anim.get_animation(_anim_names[key]).loop_mode = Animation.LOOP_LINEAR
 		_play("idle")
+	if visual.dust_trail:
+		_dust = Effects.dust_trail()
+		add_child(_dust)
+		_dust.position = Vector3(0.0, 0.1, maxf(fitted.z, fitted.x) * 0.35)
+
+
+## Explosion size for this unit's death (world units, about its footprint).
+func blast_size() -> float:
+	if _visual != null and not _visual.explodes:
+		return 0.0
+	return clampf(_ring_radius * 1.6, 0.8, 2.5)
 
 
 ## Textured materials → team-tint shader; plain ones → repainted copy if listed.
@@ -216,6 +228,8 @@ func _update_animation(delta: float) -> void:
 		_action_left -= delta
 		return
 	var moving: bool = unit.stepping or (unit.pos - unit.prev_pos).length_squared() > 1e-8
+	if _dust != null:
+		_dust.emitting = moving
 	if moving and _anim_names.has("walk"):
 		_play("walk")
 		_anim.speed_scale = _visual.walk_speed_scale * unit.stats.move_speed
@@ -264,6 +278,8 @@ func bar_height() -> float:
 func die() -> void:
 	_dying = true
 	selected = false
+	if _dust != null:
+		_dust.emitting = false
 	if _anim != null and _anim_names.has("death"):
 		_posed = true
 		_anim.speed_scale = 1.0

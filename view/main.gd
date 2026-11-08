@@ -193,10 +193,14 @@ func _handle_events() -> void:
 					unit_views.erase(view)
 					_views_by_id.erase(event.unit_id)
 					selection.remove_view(view)
+					if view.blast_size() > 0.0:
+						Effects.explosion(effects, view.global_position, view.blast_size())
 					view.die()
 			CombatEvent.Kind.DOWNED:
 				if view != null:
 					view.set_downed()
+					Effects.smoke(effects, view.global_position, 1.6, 3.0)
+					Effects.burst(effects, view.pick_center(), Color(1.0, 0.75, 0.3, 1.0), 12, 0.5, 5.0, 0.22)
 					if view.unit.team != selection.player_team:
 						_enemy_hero_downs += 1
 					if view == _player_hero:

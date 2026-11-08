@@ -14,6 +14,7 @@ anim_walk = "Tank_Forward"
 anim_attack = ""
 anim_death = ""
 walk_speed_scale = 0.35
+dust_trail = true
 paint_materials = Dictionary[String, float]({
 "Main": 0.75,
 "Main_Dark": 0.5,

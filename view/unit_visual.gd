@@ -20,6 +20,10 @@ extends Resource
 @export var anim_death: String = "Death"
 ## Walk animation speed at a move speed of 1 cell/s.
 @export var walk_speed_scale: float = 0.5
+## Kicks up sand dust while moving (vehicles).
+@export var dust_trail: bool = false
+## Blows up when destroyed (machines) instead of only playing a death animation.
+@export var explodes: bool = true
 
 @export_group("Team colour")
 ## Textured models: recolour saturated texels to the team's hue (0..1).
