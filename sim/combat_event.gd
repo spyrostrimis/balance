@@ -10,6 +10,16 @@ enum Kind {
 	## unit_id used ability `ability_index` on other_id. HEAL: `amount` = HP
 	## restored. DAMAGE: `amount` = damage to the main target.
 	ABILITY,
+	## A recovery unit (other_id = recovery id) was sent for downed hero unit_id.
+	RECOVERY_SENT,
+	## The recovery unit other_id picked up hero unit_id.
+	HERO_LOADED,
+	## Hero unit_id left the map; back in `amount` ticks.
+	HERO_AWAY,
+	## Hero unit_id is back on the map at its start area.
+	HERO_RETURNED,
+	## The player's hero (unit_id) is down: the mission is lost.
+	MISSION_FAILED,
 }
 
 var kind: Kind = Kind.SHOT

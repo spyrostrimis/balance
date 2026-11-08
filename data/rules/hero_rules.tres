@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="HeroRules" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://sim/hero_rules.gd" id="1_rules"]
+
+[resource]
+script = ExtResource("1_rules")
+low_hp_warning_fraction = 0.3
+recovery_speed = 6.0
+recovery_load_seconds = 2.0
+recovery_offmap_margin = 4.0
+return_seconds = 60.0
+return_hp_fraction = 1.0

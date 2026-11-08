@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="MissionData" load_steps=7 format=3]
+[gd_resource type="Resource" script_class="MissionData" load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://sim/mission_data.gd" id="1_mission"]
 [ext_resource type="Script" path="res://sim/unit_stats.gd" id="2_stats"]
@@ -7,6 +7,7 @@
 [ext_resource type="Resource" path="res://data/units/red_leader.tres" id="5_red_leader"]
 [ext_resource type="Resource" path="res://data/units/infantry.tres" id="6_infantry"]
 [ext_resource type="Resource" path="res://data/units/light_vehicle.tres" id="7_vehicle"]
+[ext_resource type="Resource" path="res://data/rules/hero_rules.tres" id="8_rules"]
 
 [resource]
 script = ExtResource("1_mission")
@@ -14,3 +15,5 @@ display_name = "The Rock"
 map = ExtResource("3_map")
 blue_roster = Array[ExtResource("2_stats")]([ExtResource("4_blue_leader"), ExtResource("6_infantry"), ExtResource("6_infantry"), ExtResource("7_vehicle")])
 red_roster = Array[ExtResource("2_stats")]([ExtResource("5_red_leader"), ExtResource("6_infantry"), ExtResource("6_infantry"), ExtResource("7_vehicle")])
+player_team = 0
+hero_rules = ExtResource("8_rules")

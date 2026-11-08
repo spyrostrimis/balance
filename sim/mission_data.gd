@@ -7,3 +7,6 @@ extends Resource
 @export var map: MapLayout
 @export var blue_roster: Array[UnitStats] = []
 @export var red_roster: Array[UnitStats] = []
+## The human player's team; the other teams are AI (their heroes get recovered).
+@export var player_team: SimUnit.Team = SimUnit.Team.BLUE
+@export var hero_rules: HeroRules

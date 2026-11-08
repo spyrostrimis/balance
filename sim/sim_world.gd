@@ -25,8 +25,13 @@ extends RefCounted
 ## - At 0 HP troops die; heroes are downed instead (stay on the map, inactive).
 ##
 ## Hero abilities (design/GDD.md -> Heroes): an active ability walks the hero into
-## range and sight of its target, then fires and cools down. Auras modify the
-## damage dealt / taken by own units nearby while the hero is up.
+## range and sight of its target, then fires and cools down. Auras modify own
+## units nearby (damage dealt / taken, attack and move speed) while the hero is up.
+##
+## The hero rule: heroes are downed, never killed. The player's hero downed =
+## mission failed (outcome DEFEAT). A downed AI hero is fetched by a recovery
+## unit (SimRecovery: untargetable, unblockable), carried off the map, and
+## returns at its start area after rules.return_seconds.
 
 const TICKS_PER_SECOND: int = 15
 const TICK_SECONDS: float = 1.0 / TICKS_PER_SECOND
@@ -40,6 +45,14 @@ const CHASE_REPLAN_TICKS: int = 5
 ## An auto-picked target is dropped beyond acquire_range + this many cells.
 const LEASH: float = 1.5
 
+enum Outcome { NONE, DEFEAT }
+
+## The human player's team; every other team is AI.
+var player_team: SimUnit.Team = SimUnit.Team.BLUE
+var rules: HeroRules = HeroRules.new()
+var outcome: Outcome = Outcome.NONE
+## Recovery units on their way (not units: never targeted or blocked).
+var recoveries: Array[SimRecovery] = []
 var grid: MapGrid = MapGrid.new()
 var pathfinder: Pathfinder = Pathfinder.new()
 var units: Array[SimUnit] = []
@@ -49,6 +62,7 @@ var events: Array[CombatEvent] = []
 
 var _pending: Array[SimCommand] = []
 var _next_id: int = 1
+var _next_recovery_id: int = 1
 var _by_id: Dictionary[int, SimUnit] = {}
 ## Cell → unit id, per layer (occupied cells and cells being stepped into).
 var _ground_res: Dictionary[Vector2i, int] = {}
@@ -75,6 +89,9 @@ func load_map(layout: MapLayout) -> String:
 func setup_mission(data: MissionData) -> String:
 	if data == null:
 		return "mission data is null"
+	player_team = data.player_team
+	if data.hero_rules != null:
+		rules = data.hero_rules
 	var err: String = load_map(data.map)
 	if err != "":
 		return err
@@ -114,6 +131,8 @@ func queue_command(command: SimCommand) -> void:
 func step() -> void:
 	tick += 1
 	events.clear()
+	for recovery: SimRecovery in recoveries:
+		recovery.prev_pos = recovery.pos
 	for unit: SimUnit in units:
 		unit.prev_pos = unit.pos
 		for i: int in unit.ability_cooldowns.size():
@@ -132,6 +151,8 @@ func step() -> void:
 			_move(unit)
 	_update_auras()
 	_resolve_combat()
+	_update_away_heroes()  # before recoveries: a hero leaving this tick starts its full countdown
+	_update_recoveries()
 
 
 ## Orders units of `team` towards `target` (called by MoveCommand on a tick).
@@ -512,6 +533,7 @@ func _resolve_combat() -> void:
 		if unit.stats.is_hero:
 			_down(unit)
 			events.append(CombatEvent.new(CombatEvent.Kind.DOWNED, unit.id, killer))
+			_on_hero_downed(unit)
 		else:
 			_remove(unit)
 			events.append(CombatEvent.new(CombatEvent.Kind.DIED, unit.id, killer))
@@ -552,6 +574,140 @@ func _down(unit: SimUnit) -> void:
 		unit.occupied_cell = unit.step_cell
 		unit.pos = SimUnit.cell_center(unit.step_cell)
 		unit.stepping = false
+
+
+## The player's hero down = mission failed; an AI hero gets a recovery unit.
+func _on_hero_downed(hero: SimUnit) -> void:
+	if hero.team == player_team:
+		if outcome == Outcome.NONE:
+			outcome = Outcome.DEFEAT
+			events.append(CombatEvent.new(CombatEvent.Kind.MISSION_FAILED, hero.id, -1))
+		return
+	var recovery: SimRecovery = SimRecovery.new(_next_recovery_id, hero.team, hero.id, recovery_entry(hero.team))
+	_next_recovery_id += 1
+	recoveries.append(recovery)
+	events.append(CombatEvent.new(CombatEvent.Kind.RECOVERY_SENT, hero.id, recovery.id))
+
+
+## Where a team's recovery units enter and leave: beyond the map edge, out
+## from the map centre towards the team's start area.
+func recovery_entry(team: SimUnit.Team) -> Vector2:
+	var center: Vector2 = Vector2(grid.size()) * 0.5
+	var spawns: Array[Vector2i] = grid.blue_spawns if team == SimUnit.Team.BLUE else grid.red_spawns
+	var dir: Vector2 = Vector2(0.0, -1.0)
+	if not spawns.is_empty():
+		var sum: Vector2 = Vector2.ZERO
+		for cell: Vector2i in spawns:
+			sum += SimUnit.cell_center(cell)
+		var away_from_center: Vector2 = sum / spawns.size() - center
+		if away_from_center.length() > EPSILON:
+			dir = away_from_center.normalized()
+	return center + dir * (center.length() + rules.recovery_offmap_margin)
+
+
+## Recovery units fly in a straight line: in to the hero, load, back out.
+func _update_recoveries() -> void:
+	var step_len: float = rules.recovery_speed * TICK_SECONDS
+	for recovery: SimRecovery in recoveries.duplicate():
+		recovery.prev_pos = recovery.pos
+		var hero: SimUnit = get_unit(recovery.hero_id)
+		if hero == null:
+			recoveries.erase(recovery)
+			continue
+		match recovery.state:
+			SimRecovery.State.INBOUND:
+				if _fly(recovery, hero.pos, step_len):
+					recovery.state = SimRecovery.State.LOADING
+					recovery.load_ticks_left = maxi(1, roundi(rules.recovery_load_seconds * TICKS_PER_SECOND))
+			SimRecovery.State.LOADING:
+				recovery.load_ticks_left -= 1
+				if recovery.load_ticks_left <= 0:
+					_lift(hero)
+					recovery.state = SimRecovery.State.OUTBOUND
+					events.append(CombatEvent.new(CombatEvent.Kind.HERO_LOADED, hero.id, recovery.id))
+			SimRecovery.State.OUTBOUND:
+				var gone: bool = _fly(recovery, recovery.exit_pos, step_len)
+				hero.pos = recovery.pos
+				if gone:
+					recoveries.erase(recovery)
+					hero.carried = false
+					hero.away = true
+					hero.return_ticks_left = maxi(1, roundi(rules.return_seconds * TICKS_PER_SECOND))
+					events.append(CombatEvent.new(CombatEvent.Kind.HERO_AWAY, hero.id, recovery.id, hero.return_ticks_left))
+
+
+## Moves towards `target`; true once there.
+func _fly(recovery: SimRecovery, target: Vector2, step_len: float) -> bool:
+	var to_target: Vector2 = target - recovery.pos
+	if to_target.length() <= step_len + EPSILON:
+		recovery.pos = target
+		return true
+	recovery.pos += to_target.normalized() * step_len
+	return false
+
+
+## The recovery unit picks the hero up: it lets go of its cell.
+func _lift(hero: SimUnit) -> void:
+	var layer: Dictionary[Vector2i, int] = _layer(hero)
+	for cell: Vector2i in [hero.occupied_cell, hero.step_cell]:
+		if layer.get(cell, -1) == hero.id:
+			layer.erase(cell)
+	hero.stepping = false
+	hero.carried = true
+
+
+## Heroes off the map count down, then come back at their start area.
+func _update_away_heroes() -> void:
+	for unit: SimUnit in units:
+		if not unit.away:
+			continue
+		unit.return_ticks_left -= 1
+		if unit.return_ticks_left <= 0 and _return_hero(unit):
+			events.append(CombatEvent.new(CombatEvent.Kind.HERO_RETURNED, unit.id, -1))
+
+
+## Puts the hero back on the free cell nearest its team's first spawn cell, with
+## rules.return_hp_fraction HP and every ability ready. False if no cell is free
+## (it tries again next tick).
+func _return_hero(hero: SimUnit) -> bool:
+	var spawns: Array[Vector2i] = grid.blue_spawns if hero.team == SimUnit.Team.BLUE else grid.red_spawns
+	var anchor: Vector2i = spawns[0] if not spawns.is_empty() else grid.size() / 2
+	var cell: Vector2i = Vector2i(-1, -1)
+	for r: int in range(0, maxi(grid.width, grid.height) + 1):
+		var best_d: float = INF
+		for y: int in range(anchor.y - r, anchor.y + r + 1):
+			for x: int in range(anchor.x - r, anchor.x + r + 1):
+				if maxi(absi(x - anchor.x), absi(y - anchor.y)) != r:
+					continue
+				var c: Vector2i = Vector2i(x, y)
+				var d: float = Vector2(c - anchor).length()
+				if is_cell_free(c) and d < best_d:
+					cell = c
+					best_d = d
+		if cell != Vector2i(-1, -1):
+			break
+	if cell == Vector2i(-1, -1):
+		return false
+	hero.away = false
+	hero.carried = false
+	hero.downed = false
+	hero.hp = maxi(1, roundi(hero.stats.max_hp * rules.return_hp_fraction))
+	hero.occupied_cell = cell
+	hero.step_cell = cell
+	hero.stepping = false
+	hero.pos = SimUnit.cell_center(cell)
+	hero.prev_pos = hero.pos
+	hero.path.clear()
+	hero.has_destination = false
+	hero.attack_target_id = -1
+	hero.target_forced = false
+	hero.has_home = false
+	hero.cast_index = -1
+	hero.cast_target_id = -1
+	hero.cooldown_left = 0.0
+	hero.ability_cooldowns.fill(0)
+	_layer(hero)[cell] = hero.id
+	return true
 
 
 func _remove(unit: SimUnit) -> void:

@@ -31,6 +31,11 @@ var retargeted: bool = false
 var hp: int = 0
 ## Heroes never die: at 0 HP they are downed (inactive, untargetable).
 var downed: bool = false
+## Downed AI hero: being carried by a recovery unit (holds no cell, pos follows it).
+var carried: bool = false
+## Downed AI hero: off the map, coming back when return_ticks_left reaches 0.
+var away: bool = false
+var return_ticks_left: int = 0
 var dead: bool = false
 ## Enemy this unit is attacking (-1 = none).
 var attack_target_id: int = -1

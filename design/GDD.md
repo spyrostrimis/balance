@@ -34,7 +34,6 @@ Rule: we borrow mechanics and archetypes, never names, factions, designs or asse
 Placeholder names by colour until real names are chosen.
 
 ### Blue — the generally good guys
-Working name: **Adama** (from the Greek *adamantinos*, "unbreakable").
 More democratic, more about self-determination and freedom. But like the Jedi they can be
 flawed: bureaucratic, slow to decide, arrogant, lost touch with common people.
 They want to bring balance to the galaxy by removing and resisting the autocracy and
@@ -82,12 +81,22 @@ Religious, mysterious fanatics. Like the Emperor's forces in Dune II.
   - Every hero has an escape option: self-repair, retreat or recall.
   - Decided: **every AI-controlled hero escapes when its HP reaches zero** (it is
     downed and taken off the field; the details are milestone 6, see "Downed enemy hero").
-- **Downed enemy hero:**
+- **Downed enemy hero** (decided, milestone 6):
   - Loses its aura and abilities while down — that's the window to push.
-  - A recovery unit comes, picks up the hero and carries it home.
-  - Destroy the recovery unit → the hero stays down longer, or for the rest of the
-    mission **(proposal: which one)**.
-  - Recovery unit gets home → the hero returns repaired after a delay.
+  - A recovery unit comes, picks up the hero and carries it off the map:
+    a **ground truck** that drives out over the map edge on open maps, a
+    **dropship** that flies in and out on maps surrounded by cliffs or walls.
+  - Recovery units are **untargetable, invulnerable and can't be blocked** —
+    nothing stops them leaving.
+  - **60 s** after leaving the map the hero returns at its side's start area,
+    **full HP, abilities ready**.
+  - Implementation (proposal): the recovery unit is sent the moment the hero
+    goes down, flies/drives at 6 cells/s and loads the hero for 2 s.
+- **Player hero downed** = mission failed (decided). A simple "Mission failed"
+  screen with Restart / Quit for now; the real start/end screens come in milestone 7.
+- **Low-HP warning** (decided): when the player's hero drops below **30% HP**: an
+  alert message, the portrait pulses red and a warning sound plays. It fires again
+  after the hero has been healed back above 30%.
 
 ### Hero abilities for Mission 1 (one active + one passive)
 - **Blue Leader:** Repair (active — heals a friendly unit, can target self, which is the
@@ -201,6 +210,9 @@ engage range they raise the alarm (e.g. call nearby units).
 ### Mission 1 — "The Rock" (working name)
 - Purpose: teach the basics by playing.
 - Small map (32×32 cells). The Orichalcum rock is in the middle.
+- Final look (decided, for a later art pass): a **forest** scene, **not walled**,
+  with a **glade** in the middle where the Orichalcum rock stands. Recovery then
+  uses a ground truck. Until then we keep the current placeholder map.
 - Map layout **(proposal)**: `data/maps/mission_01.tres`. Desert planet, cliff-walled.
   Point-symmetric (each side sees the same map rotated 180°) for a fair fight. Blue
   starts south-west, Red north-east. The 2×2 Orichalcum rock in the centre has four
@@ -224,8 +236,5 @@ engage range they raise the alarm (e.g. call nearby units).
 - Real names for the four factions and the heroes.
 - ~~Working title of the game.~~ **Answered: Balance.**
 - Unit roster per faction beyond Mission 1.
-- Recovery unit: what happens if it's destroyed (longer downtime vs out for the mission).
-- Mission 1 has no base: where does the enemy's recovery unit come from
-  (enters from a map edge, arrives by dropship, …)?
 - Are the troops machines, people, or both? (Blue's "Repair" ability suggests machines.)
 
