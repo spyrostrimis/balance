@@ -58,6 +58,10 @@ func _ready() -> void:
 	if err != "":
 		push_error("Failed to set up %s: %s" % [MISSION_PATH, err])
 		return
+	var look_path: String = "res://data/looks/%s.tres" % data.look
+	UnitView.current_look = load(look_path) as Look if ResourceLoader.exists(look_path) else null
+	if UnitView.current_look != null:
+		rts_camera.set_angle(UnitView.current_look.camera_pitch_degrees, UnitView.current_look.camera_fov_degrees)
 	map_view.build(world.grid)
 	for unit: SimUnit in world.units:
 		var view: UnitView = UnitView.new()
@@ -157,12 +161,14 @@ func _handle_events() -> void:
 			CombatEvent.Kind.SHOT:
 				var target: UnitView = _views_by_id.get(event.other_id, null)
 				if view != null and target != null:
+					view.play_attack()
 					Effects.shot(effects, view.muzzle_point(), target.pick_center(), UnitView.TEAM_COLORS[view.unit.team])
 			CombatEvent.Kind.ABILITY:
 				var target_view: UnitView = _views_by_id.get(event.other_id, null)
 				if view == null or target_view == null:
 					continue
 				_selftest_casts[view.unit.team] += 1
+				view.play_attack()
 				var ability: AbilityStats = view.unit.ability(event.ability_index)
 				if ability == null:
 					continue

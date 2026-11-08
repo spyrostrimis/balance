@@ -183,12 +183,13 @@ func _build_portrait(hero: SimUnit) -> SubViewportContainer:
 	viewport.add_child(_portrait_model)
 	_portrait_model.setup_display(hero.stats, hero.team)
 	_portrait_model.rotation.y = PI  # face the camera (model forward is -Z)
+	var h: float = _portrait_model.pick_height
 
 	var cam: Camera3D = Camera3D.new()
 	cam.fov = 30.0
 	viewport.add_child(cam)
-	var eye: Vector3 = Vector3(0.0, 2.1, 4.6)
-	cam.transform = Transform3D(Basis.looking_at(Vector3(0.0, 1.5, 0.0) - eye, Vector3.UP), eye)
+	var eye: Vector3 = Vector3(0.0, h * 0.85, h * 1.9)
+	cam.transform = Transform3D(Basis.looking_at(Vector3(0.0, h * 0.6, 0.0) - eye, Vector3.UP), eye)
 	return box
 
 

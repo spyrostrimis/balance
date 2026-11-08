@@ -119,6 +119,22 @@ static func clamp_to_bounds(pos: Vector3, rect: Rect2) -> Vector3:
 			clampf(pos.z, rect.position.y, rect.end.y))
 
 
+## Changes the viewing angle (per art look). Zoom distances scale with the field
+## of view so the same ground area stays visible.
+func set_angle(pitch: float, fov: float) -> void:
+	var k: float = tan(deg_to_rad(fov_degrees) * 0.5) / tan(deg_to_rad(fov) * 0.5)
+	pitch_degrees = pitch
+	fov_degrees = fov
+	min_distance *= k
+	max_distance *= k
+	start_distance *= k
+	_distance *= k
+	_target_distance *= k
+	if camera != null:
+		camera.fov = fov
+		_apply_distance()
+
+
 func _apply_distance() -> void:
 	var pitch: float = deg_to_rad(pitch_degrees)
 	camera.position = Vector3(0.0, sin(pitch) * _distance, cos(pitch) * _distance)

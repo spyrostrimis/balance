@@ -1,10 +1,11 @@
 class_name UnitView
 extends Node3D
-## Placeholder 3D model for one SimUnit: team-coloured primitives, a selection
-## ring, smooth interpolation between sim ticks, turning to face movement or the
-## attack target, a death animation and a "downed" pose for heroes. Auras are
-## invisible in the game; the debug overlay (F3) shows their radius as a ground
-## ring. Model forward is -Z.
+## The 3D model for one SimUnit: the current Look's model for its type (team
+## coloured, animated: idle / walk / attack / death), or team-coloured primitives
+## if the look has none. Selection ring, smooth interpolation between sim ticks,
+## turning to face movement or the attack target, death and "downed" poses.
+## Auras are invisible in the game; the debug overlay (F3) shows their radius as
+## a ground ring. Model forward is -Z.
 ## setup_display() builds the model alone (no sim unit), e.g. for the portrait.
 
 const TEAM_COLORS: Dictionary[SimUnit.Team, Color] = {
@@ -24,6 +25,13 @@ const DOWNED_DARKEN: float = 0.45
 const AURA_RING_WIDTH: float = 0.14
 const AURA_RING_ALPHA: float = 0.55
 const AURA_FILL_ALPHA: float = 0.07
+const TEAM_TINT_SHADER: Shader = preload("res://view/shaders/team_tint.gdshader")
+const ANIM_BLEND: float = 0.15
+## Seconds a death animation plays before the troop sinks away.
+const MODEL_DEATH_SECONDS: float = 1.2
+
+## The art look of the current mission (set by the mission scene before units are built).
+static var current_look: Look
 
 var unit: SimUnit
 ## Read-only access to the sim (to face the attack target).
@@ -50,6 +58,16 @@ var _materials: Array[StandardMaterial3D] = []
 var _base_colors: Array[Color] = []
 var _dying: bool = false
 var _aura_rings: Array[Node3D] = []
+## Model from the look (null = placeholder primitives).
+var _visual: UnitVisual
+var _tint_materials: Array[ShaderMaterial] = []
+var _anim: AnimationPlayer
+var _anim_names: Dictionary[String, StringName] = {}
+var _current_anim: StringName = &""
+## Seconds left of a one-shot action animation (attack).
+var _action_left: float = 0.0
+## Death / downed pose: no more idle or walk.
+var _posed: bool = false
 
 
 func setup(sim_unit: SimUnit, sim_world: SimWorld) -> void:
@@ -85,12 +103,128 @@ func _build_model(stats: UnitStats, team: SimUnit.Team, with_silhouette: bool) -
 		var sil_color: Color = color.lightened(0.25)
 		sil_color.a = SILHOUETTE_ALPHA
 		_silhouette.set_shader_parameter("silhouette_color", sil_color)
-	if stats.is_hero:
+	if current_look != null and current_look.units.has(stats.id):
+		_visual = current_look.units[stats.id]
+		_build_from_visual(_visual, color)
+	elif stats.is_hero:
 		_build_hero(color)
 	elif stats.id == &"light_vehicle":
 		_build_vehicle(color)
 	else:
 		_build_infantry(color)
+
+
+## Instances the look's model: team colours, fitted to its size, animations found.
+func _build_from_visual(visual: UnitVisual, color: Color) -> void:
+	var inst: Node3D = visual.scene.instantiate() as Node3D
+	_model.add_child(inst)
+	for node: Node in inst.find_children("*", "MeshInstance3D", true, false):
+		var mi: MeshInstance3D = node as MeshInstance3D
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		for s: int in mi.mesh.get_surface_count():
+			var source: BaseMaterial3D = mi.get_active_material(s) as BaseMaterial3D
+			if source == null:
+				continue
+			mi.set_surface_override_material(s, _team_material(source, visual, color))
+	var fitted: Vector3 = ModelFit.fit(inst, visual.size, visual.size_is_length, deg_to_rad(visual.yaw_offset_degrees))
+	if _silhouette != null:
+		# Only count as hidden when covered by something at least the model's own
+		# depth in front of it, so its arms and legs don't "hide" its body.
+		_silhouette.set_shader_parameter("margin", maxf(1.0, maxf(fitted.x, fitted.z) * 0.9))
+	pick_height = maxf(fitted.y, 0.6)
+	pick_radius = clampf(maxf(fitted.x, fitted.z) * 0.5, 0.6, 1.6)
+	_ring_radius = clampf(maxf(fitted.x, fitted.z) * 0.55, 0.55, 1.6)
+	var players: Array[Node] = inst.find_children("*", "AnimationPlayer", true, false)
+	if not players.is_empty():
+		_anim = players[0] as AnimationPlayer
+		for key: String in ["idle", "walk", "attack", "hit", "death"]:
+			var wanted: String = visual.get("anim_" + key) as String
+			if wanted == "":
+				continue
+			for anim_name: StringName in _anim.get_animation_list():
+				if String(anim_name).ends_with(wanted):
+					_anim_names[key] = anim_name
+					break
+		for key: String in ["idle", "walk"]:
+			if _anim_names.has(key):
+				_anim.get_animation(_anim_names[key]).loop_mode = Animation.LOOP_LINEAR
+		_play("idle")
+
+
+## Textured materials → team-tint shader; plain ones → repainted copy if listed.
+func _team_material(source: BaseMaterial3D, visual: UnitVisual, color: Color) -> Material:
+	var result: Material
+	if source.albedo_texture != null:
+		var mat: ShaderMaterial = ShaderMaterial.new()
+		mat.shader = TEAM_TINT_SHADER
+		mat.set_shader_parameter("albedo_tex", source.albedo_texture)
+		mat.set_shader_parameter("albedo_color", source.albedo_color)
+		mat.set_shader_parameter("roughness", source.roughness)
+		mat.set_shader_parameter("metallic", source.metallic)
+		if source.normal_enabled and source.normal_texture != null:
+			mat.set_shader_parameter("normal_tex", source.normal_texture)
+			mat.set_shader_parameter("has_normal", true)
+		var orm: ORMMaterial3D = source as ORMMaterial3D
+		if orm != null and orm.orm_texture != null:
+			mat.set_shader_parameter("orm_tex", orm.orm_texture)
+			mat.set_shader_parameter("has_orm", true)
+		mat.set_shader_parameter("team_color", Vector3(color.r, color.g, color.b))
+		mat.set_shader_parameter("hue_strength", visual.hue_strength)
+		mat.set_shader_parameter("sat_min", visual.sat_min)
+		mat.set_shader_parameter("paint_greys", visual.paint_greys)
+		_tint_materials.append(mat)
+		result = mat
+	else:
+		var copy: BaseMaterial3D = source.duplicate() as BaseMaterial3D
+		if visual.paint_materials.has(source.resource_name):
+			var k: float = visual.paint_materials[source.resource_name]
+			copy.albedo_color = source.albedo_color.lerp(Color(color.r * k, color.g * k, color.b * k), visual.paint_mix)
+		var standard: StandardMaterial3D = copy as StandardMaterial3D
+		if standard != null:
+			_materials.append(standard)
+			_base_colors.append(standard.albedo_color)
+		result = copy
+	result.next_pass = _silhouette
+	return result
+
+
+func _play(key: String, blend: float = ANIM_BLEND) -> void:
+	if _anim == null or not _anim_names.has(key):
+		return
+	var anim_name: StringName = _anim_names[key]
+	if anim_name == _current_anim and _anim.is_playing():
+		return
+	_current_anim = anim_name
+	_anim.play(anim_name, blend)
+
+
+## One-shot attack animation (the unit just fired).
+func play_attack() -> void:
+	if _anim == null or not _anim_names.has("attack") or _posed:
+		return
+	_current_anim = &""
+	_anim.speed_scale = 1.0
+	_play("attack", 0.05)
+	_action_left = minf(_anim.get_animation(_anim_names["attack"]).length, 0.7)
+
+
+## Idle or walk, depending on whether the unit moved this tick.
+func _update_animation(delta: float) -> void:
+	if _anim == null or _posed:
+		return
+	if _action_left > 0.0:
+		_action_left -= delta
+		return
+	var moving: bool = unit.stepping or (unit.pos - unit.prev_pos).length_squared() > 1e-8
+	if moving and _anim_names.has("walk"):
+		_play("walk")
+		_anim.speed_scale = _visual.walk_speed_scale * unit.stats.move_speed
+	elif _anim_names.has("idle"):
+		_play("idle")
+		_anim.speed_scale = 1.0
+	elif _anim.is_playing():
+		_anim.pause()  # no idle animation (e.g. tanks): hold still
+		_current_anim = &""
 
 
 ## Places the model between the last two sim positions (alpha 0..1).
@@ -104,6 +238,7 @@ func sync(alpha: float, delta: float) -> void:
 	position = GridSpace.gridf_to_world(p)
 	if unit.downed or delta <= 0.0:
 		return
+	_update_animation(delta)
 	var facing: Vector2 = unit.pos - unit.prev_pos
 	if facing.length_squared() <= 1e-8 and unit.attack_target_id != -1 and world != null:
 		var target: SimUnit = world.get_unit(unit.attack_target_id)
@@ -125,10 +260,19 @@ func bar_height() -> float:
 	return pick_height + 0.45
 
 
-## Troop died: sink and shrink, then free.
+## Troop died: death animation (or sink and shrink), then free.
 func die() -> void:
 	_dying = true
 	selected = false
+	if _anim != null and _anim_names.has("death"):
+		_posed = true
+		_anim.speed_scale = 1.0
+		_play("death", 0.05)
+		var sink: Tween = create_tween()
+		sink.tween_interval(MODEL_DEATH_SECONDS)
+		sink.tween_property(_model, "position:y", -1.5, 1.0)
+		sink.tween_callback(queue_free)
+		return
 	var tween: Tween = create_tween().set_parallel(true)
 	tween.tween_property(_model, "scale", Vector3(1.0, 0.1, 1.0), DEATH_SECONDS)
 	tween.tween_property(_model, "rotation:z", 0.6, DEATH_SECONDS)
@@ -140,6 +284,13 @@ func set_downed() -> void:
 	_refresh_aura_rings()  # a downed hero has no aura
 	for mat: StandardMaterial3D in _materials:
 		mat.albedo_color = mat.albedo_color.darkened(DOWNED_DARKEN)
+	for mat: ShaderMaterial in _tint_materials:
+		mat.set_shader_parameter("darken", DOWNED_DARKEN)
+	if _anim != null and _anim_names.has("death"):
+		_posed = true  # the death animation ends lying down and holds its last frame
+		_anim.speed_scale = 1.0
+		_play("death", 0.05)
+		return
 	var tween: Tween = create_tween().set_parallel(true)
 	tween.tween_property(_model, "rotation:x", -PI * 0.47, 0.5).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(_model, "position:y", 0.45, 0.5)
@@ -149,6 +300,11 @@ func set_downed() -> void:
 func set_revived() -> void:
 	for i: int in _materials.size():
 		_materials[i].albedo_color = _base_colors[i]
+	for mat: ShaderMaterial in _tint_materials:
+		mat.set_shader_parameter("darken", 0.0)
+	_posed = false
+	_current_anim = &""
+	_play("idle", 0.0)
 	_model.rotation = Vector3.ZERO
 	_model.position = Vector3.ZERO
 	visible = true

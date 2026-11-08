@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="UnitVisual" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/desert/units/Tank2.fbx" id="1_78g1u"]
+[ext_resource type="Script" path="res://view/unit_visual.gd" id="2_ymyt1"]
+
+[resource]
+script = ExtResource("2_ymyt1")
+scene = ExtResource("1_78g1u")
+size = 2.5
+size_is_length = true
+yaw_offset_degrees = -90.0
+anim_idle = ""
+anim_walk = "Tank_Forward"
+anim_attack = ""
+anim_death = ""
+walk_speed_scale = 0.35
+paint_materials = Dictionary[String, float]({
+"Main": 0.75,
+"Main_Dark": 0.5,
+"Main_Light": 0.95
+})

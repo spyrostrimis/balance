@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="Look" format=3]
+
+[ext_resource type="Resource" path="res://data/looks/desert/dropship.tres" id="1_gboxo"]
+[ext_resource type="Script" path="res://view/look.gd" id="2_n7rkk"]
+[ext_resource type="Script" path="res://view/unit_visual.gd" id="3_jcr5t"]
+[ext_resource type="Resource" path="res://data/looks/desert/red_leader.tres" id="4_nmkia"]
+[ext_resource type="Resource" path="res://data/looks/desert/blue_leader.tres" id="5_6di2v"]
+[ext_resource type="Resource" path="res://data/looks/desert/infantry.tres" id="6_upp35"]
+[ext_resource type="Resource" path="res://data/looks/desert/light_vehicle.tres" id="7_mu7fa"]
+
+[resource]
+script = ExtResource("2_n7rkk")
+id = &"desert"
+units = Dictionary[StringName, ExtResource("3_jcr5t")]({
+&"blue_leader": ExtResource("5_6di2v"),
+&"infantry": ExtResource("6_upp35"),
+&"light_vehicle": ExtResource("7_mu7fa"),
+&"red_leader": ExtResource("4_nmkia")
+})
+dropship = ExtResource("1_gboxo")
+camera_pitch_degrees = 67.0
+camera_fov_degrees = 32.0

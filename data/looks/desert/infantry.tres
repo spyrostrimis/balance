@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UnitVisual" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/desert/units/Enemy_QuadShell.gltf" id="1_0kr31"]
+[ext_resource type="Script" path="res://view/unit_visual.gd" id="2_ys845"]
+
+[resource]
+script = ExtResource("2_ys845")
+scene = ExtResource("1_0kr31")
+size = 1.7
+size_is_length = true
+anim_attack = "Attack"
+anim_hit = "Hit"
+anim_death = "TurnOff"
+sat_min = 0.25
+paint_greys = 0.7

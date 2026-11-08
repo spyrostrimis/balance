@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UnitVisual" format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/desert/ships/Pancake.gltf" id="1_wnmvc"]
+[ext_resource type="Script" path="res://view/unit_visual.gd" id="2_cglc4"]
+
+[resource]
+script = ExtResource("2_cglc4")
+scene = ExtResource("1_wnmvc")
+size = 6.0
+size_is_length = true
+anim_idle = ""
+anim_walk = ""
+anim_attack = ""
+anim_death = ""
+hue_strength = 0.6

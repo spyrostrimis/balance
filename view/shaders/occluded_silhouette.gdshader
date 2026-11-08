@@ -5,7 +5,8 @@ shader_type spatial;
 render_mode unshaded, depth_test_disabled, depth_draw_never, cull_back, shadows_disabled;
 
 uniform vec4 silhouette_color : source_color = vec4(0.3, 0.6, 1.0, 0.55);
-// World units: how far behind the visible surface a fragment must be to count as hidden.
+// World units: how far behind the visible surface a fragment must be to count as
+// hidden. Detailed models set it to about their own depth (no self-occlusion).
 uniform float margin = 0.08;
 uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
 
