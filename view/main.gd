@@ -2,7 +2,9 @@ extends Node3D
 ## Mission 1 scene. Sets up the sim from mission data, builds the 3D view, runs
 ## the sim on its fixed tick, interpolates the view between ticks and turns sim
 ## events (shots, abilities, deaths, downed heroes) into effects. The player's
-## hero gets the portrait + ability bar (HeroPanel).
+## hero gets the portrait + ability bar (HeroPanel). Mission flow: a start screen
+## (the sim waits), the capture objective (zone on the map + panel), and an end
+## screen on victory or defeat.
 
 const MISSION_PATH: String = "res://data/missions/mission_01.tres"
 ## The camera pivot stays this far (world units) inside the map edge.
@@ -31,7 +33,17 @@ var _alerts: Alerts
 var _warning: LowHpWarning
 var _warning_sound: AudioStreamPlayer
 var _recovery_views: Dictionary[int, RecoveryView] = {}
-var _failed_screen: MissionFailedScreen
+var _start_screen: StartScreen
+var _end_screen: EndScreen
+var _objective_panel: ObjectivePanel
+## The sim only runs after Start.
+var _started: bool = false
+## Units that died per team (for the end screen).
+var _deaths: Dictionary[SimUnit.Team, int] = {SimUnit.Team.BLUE: 0, SimUnit.Team.RED: 0}
+var _enemy_hero_downs: int = 0
+var _frame: int = 0
+## Self-test: press Start at this frame (just after shot 1 captured the start screen).
+var _selftest_start_frame: int = -1
 ## Self-test: when the low-HP warning fired and when the player's hero went down.
 var _warning_tick: int = -1
 var _player_down_tick: int = -1
@@ -77,6 +89,17 @@ func _ready() -> void:
 	_warning_sound.stream = Sounds.warning()
 	_warning_sound.volume_db = -6.0
 	add_child(_warning_sound)
+	if world.objective != null:
+		var zone: ZoneView = ZoneView.new()
+		map_view.add_child(zone)
+		zone.setup(world.objective)
+		_objective_panel = ObjectivePanel.new()
+		$UI.add_child(_objective_panel)
+		_objective_panel.setup(world.objective)
+		_objective_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
+		_objective_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		_objective_panel.offset_top = 64.0
+	_show_start_screen(data)
 
 	if App.is_selftest:
 		rts_camera.edge_pan_enabled = false
@@ -85,7 +108,12 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if App.is_selftest:
+	_frame += 1
+	if App.is_selftest and not _started and _selftest_start_frame != -1 and _frame >= _selftest_start_frame:
+		_start_mission()
+	if not _started:
+		_tick_accumulator = 0.0
+	elif App.is_selftest:
 		# Deterministic: exactly one sim tick per frame, whatever the frame rate.
 		_tick_accumulator = SimWorld.TICK_SECONDS
 		delta = SimWorld.TICK_SECONDS
@@ -94,7 +122,7 @@ func _process(delta: float) -> void:
 	var ticks: int = 0
 	if world.outcome != SimWorld.Outcome.NONE:
 		_tick_accumulator = 0.0  # mission over: the sim stops
-	while _tick_accumulator >= SimWorld.TICK_SECONDS and ticks < MAX_TICKS_PER_FRAME \
+	while _started and _tick_accumulator >= SimWorld.TICK_SECONDS and ticks < MAX_TICKS_PER_FRAME \
 			and world.outcome == SimWorld.Outcome.NONE:
 		if App.is_selftest:
 			_selftest_use_abilities()
@@ -142,7 +170,16 @@ func _handle_events() -> void:
 					AbilityStats.Effect.DAMAGE:
 						Effects.cannon(effects, view.muzzle_point(), target_view.pick_center(),
 								ability.splash_radius * GridSpace.CELL_SIZE)
+			CombatEvent.Kind.ROCK_CAPTURED:
+				var mine: bool = event.other_id == selection.player_team
+				_alerts.show_alert("You have taken the rock! Keep enemies out of the zone for %d s." % roundi(world.objective.rules.hold_seconds)
+						if mine else "Red has taken the rock! Get into the zone to stop its clock.",
+						Color(0.5, 0.75, 1.0) if mine else Color(1.0, 0.45, 0.35))
+			CombatEvent.Kind.MISSION_WON:
+				_show_end(true, event.amount as SimWorld.Reason)
 			CombatEvent.Kind.DIED:
+				if view != null:
+					_deaths[view.unit.team] += 1
 				if view != null:
 					unit_views.erase(view)
 					_views_by_id.erase(event.unit_id)
@@ -151,6 +188,8 @@ func _handle_events() -> void:
 			CombatEvent.Kind.DOWNED:
 				if view != null:
 					view.set_downed()
+					if view.unit.team != selection.player_team:
+						_enemy_hero_downs += 1
 					if view == _player_hero:
 						_player_down_tick = world.tick
 						_alerts.show_alert("Your %s is down!" % view.unit.stats.display_name, Color(1.0, 0.35, 0.3))
@@ -177,7 +216,7 @@ func _handle_events() -> void:
 					view.set_revived()
 					_alerts.show_alert("%s has returned." % view.unit.stats.display_name, Color(1.0, 0.6, 0.4))
 			CombatEvent.Kind.MISSION_FAILED:
-				_show_mission_failed()
+				_show_end(false, event.amount as SimWorld.Reason)
 
 
 ## Portrait + ability bar for the player's hero, and the targeting prompt.
@@ -255,16 +294,63 @@ func _update_low_hp_warning() -> void:
 		hero_panel.warning = _warning.active and hero_panel.unit == hero
 
 
-func _show_mission_failed() -> void:
-	if _failed_screen != null:
+func _show_start_screen(data: MissionData) -> void:
+	_start_screen = StartScreen.new()
+	$UI.add_child(_start_screen)
+	var hold: int = 60
+	var capture: int = 10
+	if world.objective != null:
+		hold = roundi(world.objective.rules.hold_seconds)
+		capture = roundi(world.objective.rules.capture_seconds)
+	_start_screen.setup("Mission 1 — %s" % data.display_name,
+			"A rich Orichalcum rock stands between your camp and Red's. Red's Leader is already "
+			+ "marching for it. Whoever holds the rock decides who builds the next army.",
+			PackedStringArray([
+				"Capture the rock: have only your units in the marked zone for %d s." % capture,
+				"Hold it for %d s with no enemy in the zone. Any enemy in the zone resets the clock." % hold,
+				"Or destroy every Red troop while the Red Leader is down.",
+				"Your Leader must not fall: if the Blue Leader goes down, the mission fails.",
+				"Red wins if it holds the rock for %d s." % hold,
+			]))
+	_start_screen.start_pressed.connect(_start_mission)
+
+
+func _start_mission() -> void:
+	if _started:
+		return
+	_started = true
+	if _start_screen != null:
+		_start_screen.queue_free()
+		_start_screen = null
+
+
+func _show_end(victory: bool, reason: SimWorld.Reason) -> void:
+	if _end_screen != null:
 		return
 	selection.cancel_ability()
-	_failed_screen = MissionFailedScreen.new()
-	$UI.add_child(_failed_screen)
-	var hero_name: String = _player_hero.unit.stats.display_name if _player_hero != null else "hero"
-	_failed_screen.setup("Your %s is down." % hero_name)
-	_failed_screen.restart_pressed.connect(func() -> void: get_tree().reload_current_scene())
-	_failed_screen.quit_pressed.connect(func() -> void: get_tree().quit())
+	var hero_name: String = _player_hero.unit.stats.display_name if _player_hero != null else "Leader"
+	var why: String = ""
+	match reason:
+		SimWorld.Reason.HERO_DOWN:
+			why = "Your %s is down." % hero_name
+		SimWorld.Reason.ROCK_HELD:
+			why = "You held the Orichalcum rock." if victory else "Red held the Orichalcum rock."
+		SimWorld.Reason.ENEMY_ROUTED:
+			why = "Red's army is destroyed and its Leader is down."
+	var seconds: int = world.tick / SimWorld.TICKS_PER_SECOND
+	var enemy: SimUnit.Team = SimUnit.Team.RED if selection.player_team == SimUnit.Team.BLUE else SimUnit.Team.BLUE
+	var details: PackedStringArray = PackedStringArray([
+		"Time: %d:%02d" % [seconds / 60, seconds % 60],
+		"Your units lost: %d   ·   Enemy units destroyed: %d   ·   Enemy Leader downed: %d" % [
+				_deaths[selection.player_team], _deaths[enemy], _enemy_hero_downs],
+	])
+	_end_screen = EndScreen.new()
+	$UI.add_child(_end_screen)
+	_end_screen.setup(victory, why, details)
+	_end_screen.restart_pressed.connect(func() -> void: get_tree().reload_current_scene())
+	_end_screen.quit_pressed.connect(func() -> void: get_tree().quit())
+	if App.is_selftest:
+		App.selftest_note("end screen: %s; %s; %s" % ["VICTORY" if victory else "DEFEAT", why, " / ".join(details)])
 
 
 func _on_selection_changed(count: int) -> void:
@@ -291,7 +377,7 @@ func _team_center(team: SimUnit.Team) -> Vector3:
 
 
 ## Self-test: select all Blue units through the same API the mouse uses, check
-## picking/box-selection math, then order an attack on the Red Leader.
+## picking/box-selection math, then send them to the rock (Red's AI plays Red).
 func _selftest_setup() -> void:
 	var own: Array[UnitView] = []
 	for view: UnitView in unit_views:
@@ -306,23 +392,18 @@ func _selftest_setup() -> void:
 	App.selftest_note("pick round trip: %d/%d own units hit" % [hits, own.size()])
 	selection.select_in_rect(get_viewport().get_visible_rect(), false)
 	App.selftest_note("box select (whole screen): %d selected" % selection.selected_views().size())
-	for view: UnitView in unit_views:
-		if view.unit.team == SimUnit.Team.RED and view.unit.stats.is_hero:
-			selection.order_attack(view)
-			# Exercise milestone 6: the Red Leader starts nearly down, so the
-			# recovery dropship comes early; it returns after 12 s instead of 60.
-			view.unit.hp = 60
-	world.rules = world.rules.duplicate() as HeroRules
-	world.rules.return_seconds = 12.0
+	if world.objective != null:
+		var c: Vector2 = world.objective.center()
+		selection.order_move(Vector2i(floori(c.x) - 1, floori(c.y) + 2))
 
 
-## Self-test stand-in for the player and the (future) AI: each hero uses its
-## active ability as soon as it's ready and there's a good target. Blue goes
-## through the real targeting UI; Red queues the command directly.
+## Self-test stand-in for the player: the Blue Leader uses its active ability
+## (through the real targeting UI) as soon as it's ready and there's a good
+## target. Red is played by its AI.
 func _selftest_use_abilities() -> void:
 	for view: UnitView in unit_views:
 		var hero: SimUnit = view.unit
-		if not hero.stats.is_hero or not hero.can_act():
+		if view != _player_hero or not hero.can_act():
 			continue
 		for i: int in hero.stats.abilities.size():
 			var ability: AbilityStats = hero.ability(i)
@@ -331,11 +412,8 @@ func _selftest_use_abilities() -> void:
 			var target: UnitView = _selftest_pick_target(hero, ability)
 			if target == null:
 				continue
-			if view == _player_hero:
-				if selection.begin_ability(i):
-					selection.cast_on(target)
-			else:
-				world.queue_command(AbilityCommand.new(hero.team, hero.id, i, target.unit.id))
+			if selection.begin_ability(i):
+				selection.cast_on(target)
 
 
 func _selftest_pick_target(hero: SimUnit, ability: AbilityStats) -> UnitView:
@@ -363,6 +441,8 @@ func _selftest_pick_target(hero: SimUnit, ability: AbilityStats) -> UnitView:
 func _on_selftest_shot(index: int, _total: int) -> void:
 	var map_center: Vector3 = GridSpace.gridf_to_world(Vector2(world.grid.size()) * 0.5)
 	var fight: Vector3 = (_team_center(SimUnit.Team.BLUE) + _team_center(SimUnit.Team.RED)) * 0.5
+	if index == 1:
+		_selftest_start_frame = _frame + 8  # shot 1 shows the start screen
 	# Shot 2: look at the Red Leader (read-only panel). Shot 3: debug overlay on.
 	App.debug_overlay = index == 3
 	App.debug_overlay_changed.emit(App.debug_overlay)
@@ -409,4 +489,6 @@ func _on_selftest_shot(index: int, _total: int) -> void:
 	App.selftest_note("shot %d (tick %d): %s; views %d; recoveries %d; outcome %d" % [index, world.tick,
 			", ".join(summary), unit_views.size(), world.recoveries.size(), world.outcome])
 	App.selftest_note("  alerts so far: %s" % " | ".join(_alerts.history))
+	if world.objective != null:
+		App.selftest_note("  rock: %s (started %s)" % [ObjectivePanel.describe(world.objective)["text"], _started])
 	App.selftest_note("  low-HP warning tick %d, player hero down tick %d" % [_warning_tick, _player_down_tick])

@@ -95,14 +95,13 @@ stdout/stderr reach the terminal). In Git Bash: `/c/Godot/Godot_v4.7.2-stable_wi
   `user://selftest/` and prints the absolute path. Optional `--shots=N` (default 3).
   Before each shot `App.selftest_shot` fires; the mission scene snaps the camera to
   5 poses in turn (Blue on the way, the fight twice, whole map, aftermath), so use `--frames=500 --shots=5`. In self-test the sim runs exactly one
-  tick per frame (deterministic). The mission scene selects all Blue units, checks
-  picking/box selection, and orders an attack on the Red Leader. Heroes use their
-  active ability whenever it's ready (Blue through the targeting UI). Shot 2 shows
-  the Red Leader inspected (read-only hero panel) or the recovery dropship if one is
-  flying, shot 3 has the F3 debug overlay on. The Red Leader starts at 60 HP so its
-  recovery runs early, and returns after 12 s instead of 60. The Blue Leader goes down
-  around frame 670: use `--frames=1000 --shots=10` to also see the low-HP warning and
-  the "Mission failed" screen (the sim stops there).
+  tick per frame (deterministic). Shot 1 shows the start screen; the mission
+  starts right after it. The mission scene selects all Blue units, checks
+  picking/box selection, and sends them to the rock; Red is played by its AI. The
+  Blue Leader uses Repair through the targeting UI whenever it's ready. Shot 2
+  shows the Red Leader inspected (read-only hero panel) or the recovery dropship
+  if one is flying, shot 3 has the F3 debug overlay on. The fight usually ends
+  within ~400 frames; the end screen (with its reason and numbers) is logged.
   It logs each team's units up/downed/in an aura, HP and abilities used per shot;
   scenes add log lines with `App.selftest_note()`.
   Effects tweens run on real time, so a just-killed unit can still show in a shot.
