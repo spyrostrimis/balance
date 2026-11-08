@@ -6,9 +6,9 @@
 script = ExtResource("1_ability")
 id = &"encouragement"
 display_name = "Encouragement"
-description = "Own units near the Leader take less damage."
+description = "A general encouragement: own units near the Leader attack and move faster."
 kind = 1
-effect = 3
-amount = 0.15
 aura_radius = 5.0
 aura_affects_self = false
+aura_attack_speed_bonus = 0.05
+aura_move_speed_bonus = 0.05

@@ -1,8 +1,9 @@
 class_name HealthBars
 extends Control
 ## Screen-space health bars above every unit (constant size, never hidden by
-## terrain), with small aura icons to the right of the bar: red chevron = deals
-## more damage, blue shield = takes less. Full-screen overlay that ignores the mouse.
+## terrain). With the debug overlay (F3) on, small aura icons show to the right
+## of the bar (auras are invisible in the game). Full-screen overlay that ignores
+## the mouse.
 
 const WIDTH_TROOP: float = 52.0
 const WIDTH_HERO: float = 76.0
@@ -55,12 +56,12 @@ func _draw() -> void:
 		draw_rect(Rect2(rect.position, Vector2(w * fraction, HEIGHT)), bar_color(fraction))
 		draw_rect(Rect2(rect.position - Vector2(TEAM_STRIPE + 2.0, 0.0), Vector2(TEAM_STRIPE, HEIGHT)),
 				UnitView.TEAM_COLORS[view.unit.team])
-		var icon_x: float = rect.end.x + 4.0
-		if view.unit.aura_damage_bonus > 0.0:
-			_draw_bonus_icon(Vector2(icon_x, rect.position.y - 1.0))
-			icon_x += BUFF_ICON + 3.0
-		if view.unit.aura_damage_reduction > 0.0:
-			_draw_shield_icon(Vector2(icon_x, rect.position.y - 1.0))
+		if App.debug_overlay:
+			var icon_x: float = rect.end.x + 4.0
+			for kind: StringName in AbilityButton.aura_icon_kinds_on_unit(view.unit):
+				AbilityButton.draw_icon(self, kind, Vector2(icon_x + BUFF_ICON * 0.5, rect.position.y + HEIGHT * 0.5),
+						BUFF_ICON * 0.55, AbilityButton.ICON_COLORS[kind])
+				icon_x += BUFF_ICON + 3.0
 		if view.unit.downed:
 			var font: Font = ThemeDB.fallback_font
 			var text: String = "DOWN"
@@ -70,20 +71,3 @@ func _draw() -> void:
 			draw_string(font, Vector2(p.x - size.x * 0.5, rect.position.y - 4.0), text,
 					HORIZONTAL_ALIGNMENT_LEFT, -1, DOWN_FONT_SIZE, DOWN_TEXT_COLOR)
 
-
-func _draw_bonus_icon(at: Vector2) -> void:
-	var s: float = BUFF_ICON
-	var pts: PackedVector2Array = PackedVector2Array([
-		at + Vector2(0.0, s * 0.75), at + Vector2(s * 0.5, s * 0.1), at + Vector2(s, s * 0.75),
-		at + Vector2(s, s), at + Vector2(s * 0.5, s * 0.45), at + Vector2(0.0, s)])
-	draw_colored_polygon(pts, AbilityButton.EFFECT_COLORS[AbilityStats.Effect.DAMAGE_BONUS])
-	draw_polyline(pts + PackedVector2Array([pts[0]]), Color.BLACK, 1.0)
-
-
-func _draw_shield_icon(at: Vector2) -> void:
-	var s: float = BUFF_ICON
-	var pts: PackedVector2Array = PackedVector2Array([
-		at, at + Vector2(s, 0.0), at + Vector2(s, s * 0.55), at + Vector2(s * 0.5, s * 1.1),
-		at + Vector2(0.0, s * 0.55)])
-	draw_colored_polygon(pts, AbilityButton.EFFECT_COLORS[AbilityStats.Effect.DAMAGE_REDUCTION])
-	draw_polyline(pts + PackedVector2Array([pts[0]]), Color.BLACK, 1.0)

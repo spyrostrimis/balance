@@ -2,8 +2,9 @@ class_name UnitView
 extends Node3D
 ## Placeholder 3D model for one SimUnit: team-coloured primitives, a selection
 ## ring, smooth interpolation between sim ticks, turning to face movement or the
-## attack target, a death animation, a "downed" pose for heroes and a ground
-## ring showing each hero aura's radius. Model forward is -Z.
+## attack target, a death animation and a "downed" pose for heroes. Auras are
+## invisible in the game; the debug overlay (F3) shows their radius as a ground
+## ring. Model forward is -Z.
 ## setup_display() builds the model alone (no sim unit), e.g. for the portrait.
 
 const TEAM_COLORS: Dictionary[SimUnit.Team, Color] = {
@@ -13,6 +14,8 @@ const TEAM_COLORS: Dictionary[SimUnit.Team, Color] = {
 const HERO_TRIM_COLOR: Color = Color(1.0, 0.82, 0.25)
 const DARK_COLOR: Color = Color(0.18, 0.18, 0.2)
 const RING_COLOR: Color = Color(0.3, 1.0, 0.35)
+## Ring of an enemy unit the player clicked to look at (not commandable).
+const INSPECT_RING_COLOR: Color = Color(1.0, 0.3, 0.25)
 const TURN_SPEED: float = 12.0
 const SILHOUETTE_SHADER: Shader = preload("res://view/shaders/occluded_silhouette.gdshader")
 const SILHOUETTE_ALPHA: float = 0.6
@@ -31,8 +34,12 @@ var pick_height: float = 1.4
 var selected: bool = false:
 	set(value):
 		selected = value
-		if _ring != null:
-			_ring.visible = value
+		_refresh_ring()
+## Shown with a red ring: the player is looking at this (enemy) unit.
+var inspected: bool = false:
+	set(value):
+		inspected = value
+		_refresh_ring()
 
 var _ring: MeshInstance3D
 var _ring_radius: float = 0.8
@@ -51,6 +58,8 @@ func setup(sim_unit: SimUnit, sim_world: SimWorld) -> void:
 	_build_model(unit.stats, unit.team, true)
 	_build_ring()
 	_build_aura_rings()
+	App.debug_overlay_changed.connect(func(_on: bool) -> void: _refresh_aura_rings())
+	_refresh_aura_rings()
 	# Face the enemy side at start: Blue (south-west) looks north-east, Red looks south-west.
 	# Yaw θ faces world direction (-sin θ, -cos θ) in XZ.
 	rotation.y = -PI * 0.25 if unit.team == SimUnit.Team.BLUE else PI * 0.75
@@ -123,8 +132,7 @@ func die() -> void:
 
 ## Hero at 0 HP: falls over and greys out, stays on the map.
 func set_downed() -> void:
-	for ring: Node3D in _aura_rings:
-		ring.visible = false  # a downed hero has no aura
+	_refresh_aura_rings()  # a downed hero has no aura
 	for mat: StandardMaterial3D in _materials:
 		mat.albedo_color = mat.albedo_color.darkened(DOWNED_DARKEN)
 	var tween: Tween = create_tween().set_parallel(true)
@@ -210,11 +218,24 @@ func _build_ring() -> void:
 	_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_ring.position = Vector3(0.0, 0.05, 0.0)
 	_ring.scale = Vector3(1.0, 0.3, 1.0)
-	_ring.visible = selected
 	add_child(_ring)
+	_refresh_ring()
 
 
-## A faint ground ring (and fill) per aura, sized to the aura's radius.
+func _refresh_ring() -> void:
+	if _ring == null:
+		return
+	_ring.visible = selected or inspected
+	(_ring.material_override as StandardMaterial3D).albedo_color = RING_COLOR if selected else INSPECT_RING_COLOR
+
+
+## Aura rings only with the debug overlay on, and only while the hero is up.
+func _refresh_aura_rings() -> void:
+	for ring: Node3D in _aura_rings:
+		ring.visible = App.debug_overlay and unit != null and unit.can_act()
+
+
+## Debug overlay only: a faint ground ring (and fill) per aura, sized to its radius.
 func _build_aura_rings() -> void:
 	for ability: AbilityStats in unit.stats.abilities:
 		if ability == null or ability.kind != AbilityStats.Kind.AURA:

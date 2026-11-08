@@ -6,19 +6,18 @@ extends Resource
 enum Kind {
 	## Used on a target unit by order (button / hotkey), then cools down.
 	ACTIVE,
-	## Always on while the hero is up: affects own units within aura_radius.
+	## Always on while the hero is up: modifies own units within aura_radius
+	## (the aura_* fields). Invisible in the game: the player learns about it
+	## from the hero's ability tooltip.
 	AURA,
 }
 
+## What an ACTIVE ability does (ignored for auras).
 enum Effect {
-	## ACTIVE: restore `amount` HP to the target (capped at max HP).
+	## Restore `amount` HP to the target (capped at max HP).
 	HEAL,
-	## ACTIVE: deal `amount` damage to the target, plus splash.
+	## Deal `amount` damage to the target, plus splash.
 	DAMAGE,
-	## AURA: own units deal `amount` (fraction, 0.1 = +10%) more attack damage.
-	DAMAGE_BONUS,
-	## AURA: own units take `amount` (fraction, 0.15 = 15%) less damage.
-	DAMAGE_REDUCTION,
 }
 
 enum Target {
@@ -31,10 +30,11 @@ enum Target {
 @export var display_name: String = ""
 @export_multiline var description: String = ""
 @export var kind: Kind = Kind.ACTIVE
-@export var effect: Effect = Effect.HEAL
-@export var amount: float = 0.0
 
 @export_group("Active")
+@export var effect: Effect = Effect.HEAL
+## HP healed or damage dealt.
+@export var amount: float = 0.0
 @export var target: Target = Target.ALLY
 ## Cells, centre to centre.
 @export var cast_range: float = 5.0
@@ -49,6 +49,14 @@ enum Target {
 ## Cells, centre to centre.
 @export var aura_radius: float = 5.0
 @export var aura_affects_self: bool = false
+## Fractions: 0.1 = +10% attack damage dealt.
+@export var aura_damage_bonus: float = 0.0
+## 0.15 = 15% less damage taken.
+@export var aura_damage_reduction: float = 0.0
+## 0.05 = 5% faster attacks (shorter time between shots).
+@export var aura_attack_speed_bonus: float = 0.0
+## 0.05 = 5% faster movement.
+@export var aura_move_speed_bonus: float = 0.0
 
 
 func is_active() -> bool:

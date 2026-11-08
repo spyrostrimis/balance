@@ -1,8 +1,9 @@
 class_name HeroPanel
 extends PanelContainer
-## Bottom-left HUD for the player's hero: a live 3D portrait (own little world),
-## name and HP bar, and the ability bar (actives with hotkeys and cooldowns, then
-## passive auras).
+## Bottom-left HUD for a hero: a live 3D portrait (own little world), name and
+## HP bar, and the ability bar (actives with hotkeys and cooldowns, then passive
+## auras). Normally the player's hero; read-only for an enemy hero the player
+## clicked on (tooltips only: that's how the player reads its passive).
 ##   Click the portrait: select the hero (double click: also centre the camera).
 ##   While targeting a friendly ability (e.g. Repair), clicking the portrait
 ##   targets the hero itself.
@@ -16,6 +17,7 @@ const PANEL_COLOR: Color = Color(0.05, 0.06, 0.08, 0.82)
 const HOTKEYS: PackedStringArray = ["Q", "W", "E", "R"]
 
 var unit: SimUnit
+var read_only: bool = false
 var buttons: Array[AbilityButton] = []
 
 var _portrait_model: UnitView
@@ -26,9 +28,17 @@ var _time: float = 0.0
 var _downed_shown: bool = false
 
 
-## Builds the panel for `hero`. Active abilities get hotkeys Q, W, … in order.
-func setup(hero: SimUnit) -> void:
+## Builds (or rebuilds) the panel for `hero`. Active abilities get hotkeys
+## Q, W, ... in order, unless read-only.
+func setup(hero: SimUnit, is_read_only: bool = false) -> void:
+	for child: Node in get_children():
+		remove_child(child)
+		child.queue_free()
+	buttons.clear()
+	_portrait_model = null
+	_downed_shown = false
 	unit = hero
+	read_only = is_read_only
 	name = "HeroPanel"
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var style: StyleBoxFlat = StyleBoxFlat.new()
@@ -71,11 +81,11 @@ func setup(hero: SimUnit) -> void:
 			continue
 		var button: AbilityButton = AbilityButton.new()
 		var key: String = ""
-		if ability.is_active() and next_key < HOTKEYS.size():
+		if ability.is_active() and not read_only and next_key < HOTKEYS.size():
 			key = HOTKEYS[next_key]
 			next_key += 1
-		button.setup(hero, i, key)
-		if ability.is_active():
+		button.setup(hero, i, key, read_only)
+		if ability.is_active() and not read_only:
 			button.pressed.connect(func() -> void: ability_pressed.emit(i))
 		bar.add_child(button)
 		buttons.append(button)
@@ -120,7 +130,10 @@ func _build_portrait(hero: SimUnit) -> SubViewportContainer:
 	box.custom_minimum_size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
 	box.stretch = true
 	box.mouse_filter = Control.MOUSE_FILTER_STOP
-	box.tooltip_text = "%s — click: select, double click: go to" % hero.stats.display_name
+	if read_only:
+		box.tooltip_text = "%s — double click: go to" % hero.stats.display_name
+	else:
+		box.tooltip_text = "%s — click: select, double click: go to" % hero.stats.display_name
 	box.gui_input.connect(_on_portrait_input)
 	var viewport: SubViewport = SubViewport.new()
 	viewport.own_world_3d = true

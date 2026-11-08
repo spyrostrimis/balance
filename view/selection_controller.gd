@@ -3,6 +3,8 @@ extends Control
 ## Player selection and orders. Full-screen overlay (ignores the mouse itself;
 ## reads unhandled input) that draws the drag box.
 ##   Left click unit: select it (Shift: add/remove).  Left click ground: clear.
+##   Left click enemy: look at it (red ring, can't be ordered; for heroes the
+##   hero panel shows its abilities).
 ##   Left drag: box-select own units (Shift: add).
 ##   Right click enemy: attack it (red marker).  Right click elsewhere: move (units
 ##   stop on the nearest free cells; red marker = the clicked cell itself is blocked).
@@ -14,6 +16,8 @@ extends Control
 signal selection_changed(count: int)
 ## Ability targeting started (index, prompt text) or ended (-1, "").
 signal targeting_changed(index: int, prompt: String)
+## The enemy unit the player is looking at changed (null = none).
+signal inspect_changed(view: UnitView)
 
 const DRAG_THRESHOLD_PX: float = 6.0
 const BOX_FILL: Color = Color(0.3, 1.0, 0.35, 0.12)
@@ -32,6 +36,8 @@ var hero_view: UnitView
 
 ## Ability whose target is being chosen, or -1.
 var _targeting: int = -1
+## Enemy unit being looked at, or null.
+var inspected: UnitView
 
 var _views: Array[UnitView] = []
 var _selected: Array[UnitView] = []
@@ -199,8 +205,12 @@ func _draw() -> void:
 func click_select(screen_pos: Vector2, additive: bool) -> void:
 	var hit: UnitView = unit_at(screen_pos)
 	if hit == null:
-		if not additive:
-			clear_selection()
+		if additive:
+			return
+		var other: UnitView = unit_at(screen_pos, false)
+		clear_selection()
+		if other != null and other.unit.team != player_team:
+			set_inspected(other)
 		return
 	if not additive:
 		var only: Array[UnitView] = [hit]
@@ -235,7 +245,20 @@ func clear_selection() -> void:
 	set_selection(none)
 
 
+## Looks at an enemy unit (red ring). Selecting own units ends it.
+func set_inspected(view: UnitView) -> void:
+	if inspected == view:
+		return
+	if inspected != null and is_instance_valid(inspected):
+		inspected.inspected = false
+	inspected = view
+	if inspected != null:
+		inspected.inspected = true
+	inspect_changed.emit(inspected)
+
+
 func set_selection(views: Array[UnitView]) -> void:
+	set_inspected(null)
 	for view: UnitView in _selected:
 		view.selected = false
 	_selected = views.duplicate()
@@ -247,6 +270,8 @@ func set_selection(views: Array[UnitView]) -> void:
 ## Removes a unit view (unit died): from picking and from the selection.
 func remove_view(view: UnitView) -> void:
 	_views.erase(view)
+	if inspected == view:
+		set_inspected(null)
 	if _selected.has(view):
 		_selected.erase(view)
 		selection_changed.emit(_selected.size())

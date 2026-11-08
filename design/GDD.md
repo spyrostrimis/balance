@@ -34,6 +34,7 @@ Rule: we borrow mechanics and archetypes, never names, factions, designs or asse
 Placeholder names by colour until real names are chosen.
 
 ### Blue — the generally good guys
+Working name: **Adama** (from the Greek *adamantinos*, "unbreakable").
 More democratic, more about self-determination and freedom. But like the Jedi they can be
 flawed: bureaucratic, slow to decide, arrogant, lost touch with common people.
 They want to bring balance to the galaxy by removing and resisting the autocracy and
@@ -90,7 +91,8 @@ Religious, mysterious fanatics. Like the Emperor's forces in Dune II.
 
 ### Hero abilities for Mission 1 (one active + one passive)
 - **Blue Leader:** Repair (active — heals a friendly unit, can target self, which is the
-  escape option); Encouragement (passive aura — bonuses to nearby troops).
+  escape option); Encouragement (passive aura, decided): a general encouragement,
+  **own units within the aura attack 5% faster and move 5% faster**.
 - **Red Leader:** Heavy Cannon (active — a powerful weapon, working name, inspired by
   Megatron's but not copied); passive aura (decided): **his army within 5 cells
   deals 10% more attack damage**. Working name "Dominion" **(proposal)**.
@@ -102,8 +104,13 @@ Rules (milestone 5):
 - After use the ability cools down; it can't be used again until the cooldown ends.
 - Auras work all the time while the hero is up. A downed hero has no aura and
   can't use abilities.
-- Auras affect the hero's own units within the radius, not the hero itself
-  **(proposal)**. Two copies of the same aura don't stack (only matters later).
+- Auras affect the hero's own units within the radius, not the hero itself.
+  Two copies of the same aura don't stack (only matters later).
+- **Auras are invisible** (decided): no ring, glow or icon on the map. The only way
+  to learn about an aura is to click the hero and read its passive (hover the
+  passive button). Clicking an enemy hero shows its portrait and abilities,
+  read-only. (Developers can show aura radii and aura icons with **F3**; this
+  is a debug overlay, not part of the game.)
 - Damage after bonuses is rounded to whole HP (infantry 10 → 11 with Red's aura).
 
 Ability numbers (in `data/abilities/`):
@@ -111,7 +118,7 @@ Ability numbers (in `data/abilities/`):
 | Ability | Hero | Type | Effect | Range / radius | Cooldown |
 |---------|------|------|--------|----------------|----------|
 | Repair | Blue | active, friendly unit or self | heals 150 HP **(proposal)** | 5 cells **(proposal)** | 20 s **(proposal)** |
-| Encouragement | Blue | passive aura | own units take 15% less damage **(proposal)** | 5 cells **(proposal)** | — |
+| Encouragement | Blue | passive aura | own units: +5% attack speed, +5% move speed | 5 cells **(proposal)** | — |
 | Heavy Cannon | Red | active, enemy unit | 100 damage, plus 50% to other enemies within 1.5 cells of the target **(proposal)** | 6 cells **(proposal)** | 15 s **(proposal)** |
 | Dominion | Red | passive aura | own units deal 10% more attack damage | 5 cells | — |
 
@@ -162,8 +169,9 @@ Milestone 4, rules and stats confirmed after playtest (they will be tuned later)
 - **Line of sight (decided):** rocks, cliffs and the Orichalcum rock block shots and
   sight (later also trees, walls and buildings). Units don't block shots. A unit
   without a clear line walks until it has one. A line passing exactly through a
-  corner is blocked only if both cells beside the corner block **(proposal)**.
-  Shots to or from air units ignore terrain **(proposal; no air units yet)**.
+  corner is blocked only if both cells beside the corner block.
+  Abilities need line of sight too. Shots to or from air units ignore terrain
+  (no air units yet).
 - **Group speed (decided):** every unit moves at its own speed, no formation speed.
 - **Death:** troops at 0 HP die and free their cell. Heroes at 0 HP are **downed**:
   they fall over, stay on their cell, can't act or be targeted, and show "DOWN".

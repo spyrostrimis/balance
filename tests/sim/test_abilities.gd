@@ -12,6 +12,7 @@ var _heal: AbilityStats
 var _cannon: AbilityStats
 var _bonus_aura: AbilityStats
 var _shield_aura: AbilityStats
+var _speed_aura: AbilityStats
 
 
 func before_test() -> void:
@@ -49,15 +50,19 @@ func before_test() -> void:
 
 	_bonus_aura = AbilityStats.new()
 	_bonus_aura.kind = AbilityStats.Kind.AURA
-	_bonus_aura.effect = AbilityStats.Effect.DAMAGE_BONUS
-	_bonus_aura.amount = 0.1
+	_bonus_aura.aura_damage_bonus = 0.1
 	_bonus_aura.aura_radius = 3.0
 
 	_shield_aura = AbilityStats.new()
 	_shield_aura.kind = AbilityStats.Kind.AURA
-	_shield_aura.effect = AbilityStats.Effect.DAMAGE_REDUCTION
-	_shield_aura.amount = 0.2
+	_shield_aura.aura_damage_reduction = 0.2
 	_shield_aura.aura_radius = 3.0
+
+	_speed_aura = AbilityStats.new()
+	_speed_aura.kind = AbilityStats.Kind.AURA
+	_speed_aura.aura_attack_speed_bonus = 0.05
+	_speed_aura.aura_move_speed_bonus = 0.05
+	_speed_aura.aura_radius = 3.0
 
 
 func _hero_with(abilities: Array[AbilityStats], armed: bool = false) -> UnitStats:
@@ -274,6 +279,59 @@ func test_damage_reduction_aura_protects_nearby_allies() -> void:
 	assert_int(blue.hp).is_equal(92)  # 10 x 0.8
 
 
+func test_attack_speed_aura_shortens_time_between_shots() -> void:
+	var world: SimWorld = _world(["......"])
+	var aura_list: Array[AbilityStats] = [_speed_aura]
+	world.spawn_unit(_hero_with(aura_list), BLUE, Vector2i(0, 0))
+	var blue: SimUnit = world.spawn_unit(_soldier, BLUE, Vector2i(1, 0))
+	var red: SimUnit = world.spawn_unit(_unarmed, RED, Vector2i(3, 0))
+	red.hp = 100000
+	blue.attack_target_id = red.id
+	blue.target_forced = true
+	# 15-tick cooldown at 1.05x: 21 shots in 300 ticks instead of 20 (shots at
+	# tick 1 then every 14.29 ticks on average).
+	var shots: int = 0
+	for event: CombatEvent in _run(world, 300):
+		if event.kind == CombatEvent.Kind.SHOT and event.unit_id == blue.id:
+			shots += 1
+	assert_float(blue.aura_attack_speed_bonus).is_equal_approx(0.05, 0.0001)
+	assert_int(shots).is_equal(21)
+
+
+func test_without_aura_shots_follow_the_plain_cooldown() -> void:
+	var world: SimWorld = _world(["......"])
+	var blue: SimUnit = world.spawn_unit(_soldier, BLUE, Vector2i(1, 0))
+	var red: SimUnit = world.spawn_unit(_unarmed, RED, Vector2i(3, 0))
+	red.hp = 100000
+	blue.attack_target_id = red.id
+	blue.target_forced = true
+	var shots: int = 0
+	for event: CombatEvent in _run(world, 300):
+		if event.kind == CombatEvent.Kind.SHOT:
+			shots += 1
+	assert_int(shots).is_equal(20)
+
+
+func test_move_speed_aura_makes_units_faster() -> void:
+	# Same walk twice: once escorted by the hero (in its aura), once alone.
+	var distances: Array[float] = []
+	for with_hero: bool in [true, false]:
+		var world: SimWorld = _world(["...................."])
+		var walker: SimUnit = world.spawn_unit(_unarmed, BLUE, Vector2i(1, 0))
+		var ids: Array[int] = [walker.id]
+		if with_hero:
+			var aura_list: Array[AbilityStats] = [_speed_aura]
+			var hero_stats: UnitStats = _hero_with(aura_list)
+			hero_stats.move_speed = 3.0 * 1.05  # keeps up with the buffed walker
+			ids.append(world.spawn_unit(hero_stats, BLUE, Vector2i(0, 0)).id)
+		world.step()  # auras are set from the first tick
+		world.queue_command(MoveCommand.new(BLUE, ids, Vector2i(19, 0)))
+		_run(world, 40)
+		assert_float(walker.aura_move_speed_bonus).is_equal_approx(0.05 if with_hero else 0.0, 0.0001)
+		distances.append(walker.pos.x - 1.5)
+	assert_float(distances[0] / distances[1]).is_between(1.03, 1.07)
+
+
 func test_downed_hero_loses_aura_and_cannot_cast() -> void:
 	var world: SimWorld = _world(["......"])
 	var abilities: Array[AbilityStats] = [_heal, _bonus_aura]
@@ -316,9 +374,18 @@ func test_mission_01_leaders_have_their_abilities() -> void:
 	assert_int(blue.abilities[1].kind).is_equal(AbilityStats.Kind.AURA)
 	assert_str(red.abilities[0].display_name).is_equal("Heavy Cannon")
 	assert_int(red.abilities[0].target).is_equal(AbilityStats.Target.ENEMY)
+	# Decided: Blue's aura gives +5% attack speed and +5% move speed, nothing else.
+	var encouragement: AbilityStats = blue.abilities[1]
+	assert_float(encouragement.aura_attack_speed_bonus).is_equal_approx(0.05, 0.0001)
+	assert_float(encouragement.aura_move_speed_bonus).is_equal_approx(0.05, 0.0001)
+	assert_float(encouragement.aura_damage_bonus).is_equal(0.0)
+	assert_float(encouragement.aura_damage_reduction).is_equal(0.0)
 	# Decided: Red's aura gives +10% attack damage within 5 cells.
 	var dominion: AbilityStats = red.abilities[1]
 	assert_int(dominion.kind).is_equal(AbilityStats.Kind.AURA)
-	assert_int(dominion.effect).is_equal(AbilityStats.Effect.DAMAGE_BONUS)
-	assert_float(dominion.amount).is_equal_approx(0.1, 0.0001)
+	assert_float(dominion.aura_damage_bonus).is_equal_approx(0.1, 0.0001)
+	assert_float(dominion.aura_attack_speed_bonus).is_equal(0.0)
 	assert_float(dominion.aura_radius).is_equal_approx(5.0, 0.0001)
+	# Decided: auras never affect the hero itself.
+	assert_bool(encouragement.aura_affects_self).is_false()
+	assert_bool(dominion.aura_affects_self).is_false()

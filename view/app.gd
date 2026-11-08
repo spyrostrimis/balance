@@ -38,9 +38,13 @@ var _catcher: ErrorCatcher = null
 ## Emitted before each self-test screenshot (1-based), so a scene can pose its
 ## camera. The shot is taken a few frames later.
 signal selftest_shot(index: int, total: int)
+## Debug overlay toggled (F3): shows the otherwise invisible aura radii and
+## aura icons. Off by default; not part of the finished game's UI.
+signal debug_overlay_changed(on: bool)
 
 ## True while running in self-test mode.
 var is_selftest: bool = false
+var debug_overlay: bool = false
 
 var _selftest_notes: PackedStringArray = PackedStringArray()
 
@@ -66,6 +70,10 @@ func _input(event: InputEvent) -> void:
 	var is_enter: bool = key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER
 	if key.keycode == KEY_F11 or (is_enter and key.alt_pressed):
 		toggle_fullscreen()
+		get_viewport().set_input_as_handled()
+	elif key.keycode == KEY_F3:
+		debug_overlay = not debug_overlay
+		debug_overlay_changed.emit(debug_overlay)
 		get_viewport().set_input_as_handled()
 	elif key.keycode == KEY_ESCAPE and is_fullscreen(get_window().mode):
 		# Esc only leaves full screen; when windowed it passes through to the game.

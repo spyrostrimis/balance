@@ -41,7 +41,9 @@ fighting for control of the Orichalcum rock in the middle. Spec: `design/GDD.md`
   (window size override), resizable. Stretch mode `canvas_items`, aspect `expand`
   (UI scales; 3D renders at native resolution, so it's sharp at 1080p, 1440p and 4K).
   F11 and Alt+Enter toggle full screen; Esc leaves full screen
-  (`view/app.gd`, autoload `App`).
+  (`view/app.gd`, autoload `App`). F3 toggles a debug overlay (`App.debug_overlay`)
+  for things that are invisible in the game, e.g. aura radii — never show those
+  without it.
 - Art: stylised low-poly, bright saturated colours, ONE art family (no mixing packs
   with different proportions/styles). Placeholders (primitive meshes, team-coloured)
   until a milestone works. Every external asset is CC0 or own work, listed with its
@@ -94,8 +96,11 @@ stdout/stderr reach the terminal). In Git Bash: `/c/Godot/Godot_v4.7.2-stable_wi
   Before each shot `App.selftest_shot` fires; the mission scene snaps the camera to
   5 poses in turn (Blue on the way, the fight twice, whole map, aftermath), so use `--frames=500 --shots=5`. In self-test the sim runs exactly one
   tick per frame (deterministic). The mission scene selects all Blue units, checks
-  picking/box selection, and orders an attack on the Red Leader. It logs each team's
-  units up/downed and HP per shot; scenes add log lines with `App.selftest_note()`.
+  picking/box selection, and orders an attack on the Red Leader. Heroes use their
+  active ability whenever it's ready (Blue through the targeting UI). Shot 2 shows
+  the Red Leader inspected (read-only hero panel), shot 3 has the F3 debug overlay on.
+  It logs each team's units up/downed/in an aura, HP and abilities used per shot;
+  scenes add log lines with `App.selftest_note()`.
   Effects tweens run on real time, so a just-killed unit can still show in a shot.
   Use it after every view change to check scale, orientation and that meshes sit
   on the ground — then look at the PNGs.

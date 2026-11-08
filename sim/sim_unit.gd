@@ -37,8 +37,8 @@ var attack_target_id: int = -1
 ## True when the target came from an order or from being shot; false when the
 ## unit picked it itself (then it gives up if the target gets too far away).
 var target_forced: bool = false
-## Ticks until the next shot.
-var cooldown_left: int = 0
+## Ticks until the next shot (fractional: attack-speed auras shorten it).
+var cooldown_left: float = 0.0
 ## Chasing: the target cell the current route was planned for, and a replan timer.
 var chase_cell: Vector2i = Vector2i(-1, -1)
 var chase_timer: int = 0
@@ -58,6 +58,8 @@ var cast_target_id: int = -1
 ## Aura effects on this unit this tick (fractions: 0.1 = 10%).
 var aura_damage_bonus: float = 0.0
 var aura_damage_reduction: float = 0.0
+var aura_attack_speed_bonus: float = 0.0
+var aura_move_speed_bonus: float = 0.0
 
 
 func _init(unit_id: int, unit_team: Team, unit_stats: UnitStats, start_cell: Vector2i) -> void:
@@ -110,6 +112,10 @@ func ability_cooldown_fraction(index: int, ticks_per_second: int) -> float:
 	if stats_ability == null or not stats_ability.is_active():
 		return 0.0
 	return clampf(float(ability_cooldowns[index]) / float(stats_ability.cooldown_ticks(ticks_per_second)), 0.0, 1.0)
+
+
+func in_any_aura() -> bool:
+	return aura_damage_bonus > 0.0 or aura_damage_reduction > 0.0 			or aura_attack_speed_bonus > 0.0 or aura_move_speed_bonus > 0.0
 
 
 func is_casting() -> bool:

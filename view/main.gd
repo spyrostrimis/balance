@@ -140,6 +140,7 @@ func _build_hero_hud() -> void:
 	hero_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	hero_panel.ability_pressed.connect(func(index: int) -> void: selection.begin_ability(index))
 	hero_panel.portrait_clicked.connect(_on_portrait_clicked)
+	selection.inspect_changed.connect(_on_inspect_changed)
 	_target_hint = Label.new()
 	_target_hint.add_theme_font_size_override("font_size", 24)
 	_target_hint.add_theme_color_override("font_color", Color(0.6, 1.0, 0.65))
@@ -158,8 +159,23 @@ func _build_hero_hud() -> void:
 		hero_panel.set_armed(index))
 
 
+## Clicking an enemy hero shows its portrait and abilities (read-only);
+## anything else brings back the player's hero.
+func _on_inspect_changed(view: UnitView) -> void:
+	if view != null and view.unit.stats.is_hero:
+		hero_panel.setup(view.unit, true)
+	elif hero_panel.unit != _player_hero.unit:
+		hero_panel.setup(_player_hero.unit, false)
+		hero_panel.set_armed(selection.targeting_index())
+
+
 func _on_portrait_clicked(double_click: bool) -> void:
 	if not is_instance_valid(_player_hero):
+		return
+	if hero_panel.read_only:
+		var shown: UnitView = _views_by_id.get(hero_panel.unit.id, null)
+		if double_click and shown != null:
+			rts_camera.snap_to(shown.global_position, rts_camera.get_distance())
 		return
 	if selection.is_targeting():
 		selection.cast_on(_player_hero)  # e.g. Repair on the Leader itself
@@ -261,6 +277,17 @@ func _selftest_pick_target(hero: SimUnit, ability: AbilityStats) -> UnitView:
 func _on_selftest_shot(index: int, _total: int) -> void:
 	var map_center: Vector3 = GridSpace.gridf_to_world(Vector2(world.grid.size()) * 0.5)
 	var fight: Vector3 = (_team_center(SimUnit.Team.BLUE) + _team_center(SimUnit.Team.RED)) * 0.5
+	# Shot 2: look at the Red Leader (read-only panel). Shot 3: debug overlay on.
+	App.debug_overlay = index == 3
+	App.debug_overlay_changed.emit(App.debug_overlay)
+	if index == 2:
+		for view: UnitView in unit_views:
+			if view.unit.team != selection.player_team and view.unit.stats.is_hero:
+				selection.set_inspected(view)
+		App.selftest_note("inspect: panel shows %s (read-only: %s)" % [hero_panel.unit.stats.display_name, hero_panel.read_only])
+	elif index == 3:
+		selection.set_inspected(null)
+		App.selftest_note("inspect cleared: panel shows %s" % hero_panel.unit.stats.display_name)
 	match (index - 1) % 5:
 		0:
 			rts_camera.snap_to(_team_center(SimUnit.Team.BLUE), rts_camera.start_distance)
@@ -285,7 +312,7 @@ func _on_selftest_shot(index: int, _total: int) -> void:
 				hp += unit.hp
 		var buffed: int = 0
 		for unit: SimUnit in world.units:
-			if unit.team == team and (unit.aura_damage_bonus > 0.0 or unit.aura_damage_reduction > 0.0):
+			if unit.team == team and unit.in_any_aura():
 				buffed += 1
 		summary.append("%s: %d up (%d hp), %d downed, %d in aura, %d abilities used" % [
 				"blue" if team == SimUnit.Team.BLUE else "red", alive, hp, downed, buffed, _selftest_casts[team]])

@@ -407,6 +407,8 @@ func _update_auras() -> void:
 	for unit: SimUnit in units:
 		unit.aura_damage_bonus = 0.0
 		unit.aura_damage_reduction = 0.0
+		unit.aura_attack_speed_bonus = 0.0
+		unit.aura_move_speed_bonus = 0.0
 	for source: SimUnit in units:
 		if not source.can_act():
 			continue
@@ -420,11 +422,10 @@ func _update_auras() -> void:
 					continue
 				if source.pos.distance_to(unit.pos) > ability.aura_radius + EPSILON:
 					continue
-				match ability.effect:
-					AbilityStats.Effect.DAMAGE_BONUS:
-						unit.aura_damage_bonus = maxf(unit.aura_damage_bonus, ability.amount)
-					AbilityStats.Effect.DAMAGE_REDUCTION:
-						unit.aura_damage_reduction = maxf(unit.aura_damage_reduction, ability.amount)
+				unit.aura_damage_bonus = maxf(unit.aura_damage_bonus, ability.aura_damage_bonus)
+				unit.aura_damage_reduction = maxf(unit.aura_damage_reduction, ability.aura_damage_reduction)
+				unit.aura_attack_speed_bonus = maxf(unit.aura_attack_speed_bonus, ability.aura_attack_speed_bonus)
+				unit.aura_move_speed_bonus = maxf(unit.aura_move_speed_bonus, ability.aura_move_speed_bonus)
 
 
 ## Damage after the attacker's and the target's aura effects, in whole HP.
@@ -479,18 +480,19 @@ func _resolve_combat() -> void:
 	for unit: SimUnit in units:
 		if not unit.can_act():
 			continue
-		if unit.cooldown_left > 0:
-			unit.cooldown_left -= 1
-		if unit.attack_target_id == -1 or unit.stepping or unit.cooldown_left > 0:
-			continue
+		# Attack-speed auras make the cooldown run faster. The leftover fraction
+		# carries into the next cooldown so the average rate is exact.
+		if unit.cooldown_left > 0.0:
+			unit.cooldown_left -= 1.0 + unit.aura_attack_speed_bonus
 		var target: SimUnit = get_unit(unit.attack_target_id)
-		if not _is_valid_target(unit, target) or not can_hit(unit, target):
+		if unit.attack_target_id == -1 or unit.stepping or unit.cooldown_left > EPSILON 				or not _is_valid_target(unit, target) or not can_hit(unit, target):
+			unit.cooldown_left = maxf(unit.cooldown_left, 0.0)  # no banking while not firing
 			continue
 		hit_from.append(unit)
 		hit_to.append(target)
 		hit_base.append(float(unit.stats.attack_damage))
 		hit_is_shot.append(true)
-		unit.cooldown_left = maxi(1, roundi(unit.stats.attack_cooldown * TICKS_PER_SECOND))
+		unit.cooldown_left += maxf(1.0, unit.stats.attack_cooldown * TICKS_PER_SECOND)
 
 	var last_hit_by: Dictionary[int, int] = {}
 	for i: int in hit_from.size():
@@ -669,7 +671,7 @@ func _can_enter(unit: SimUnit, cell: Vector2i) -> bool:
 
 
 func _move(unit: SimUnit) -> void:
-	var budget: float = unit.stats.move_speed * TICK_SECONDS
+	var budget: float = unit.stats.move_speed * (1.0 + unit.aura_move_speed_bonus) * TICK_SECONDS
 	while budget > EPSILON:
 		if not unit.stepping:
 			if unit.path.is_empty():
