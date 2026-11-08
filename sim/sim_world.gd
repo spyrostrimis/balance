@@ -193,6 +193,7 @@ func order_move(team: SimUnit.Team, unit_ids: Array[int], target: Vector2i) -> v
 		unit.attack_target_id = -1
 		unit.target_forced = false
 		unit.has_home = false
+		unit.guarding = false
 		_cancel_cast(unit)
 	target = Vector2i(clampi(target.x, 0, grid.width - 1), clampi(target.y, 0, grid.height - 1))
 	for unit: SimUnit in group:
@@ -220,6 +221,7 @@ func order_attack(team: SimUnit.Team, unit_ids: Array[int], target_id: int) -> v
 		unit.attack_target_id = target_id
 		unit.target_forced = true
 		unit.has_home = false
+		unit.guarding = false
 		unit.chase_timer = 0
 		unit.chase_cell = Vector2i(-1, -1)
 
@@ -239,12 +241,38 @@ func order_ability(team: SimUnit.Team, unit_id: int, index: int, target_id: int)
 	unit.attack_target_id = -1
 	unit.target_forced = false
 	unit.has_home = false
+	unit.guarding = false
 	unit.cast_index = index
 	unit.cast_target_id = target_id
 	unit.chase_timer = 0
 	unit.chase_cell = Vector2i(-1, -1)
 	_clear_destination(unit)
 	unit.path.clear()
+
+
+## Guard (called by GuardCommand): stop where you are (after the current step),
+## fire at enemies in range, don't chase.
+func order_guard(team: SimUnit.Team, unit_ids: Array[int]) -> void:
+	for unit_id: int in unit_ids:
+		var unit: SimUnit = get_unit(unit_id)
+		if unit == null or unit.team != team or not unit.can_act():
+			continue
+		_cancel_cast(unit)
+		unit.attack_target_id = -1
+		unit.target_forced = false
+		unit.has_home = false
+		unit.guarding = true
+		_clear_destination(unit)
+		unit.path.clear()
+
+
+## Retreat (called by RetreatCommand): walk back to the team's start area.
+## Moving units don't fight, so they don't stop for enemies on the way.
+func order_retreat(team: SimUnit.Team, unit_ids: Array[int]) -> void:
+	var spawns: Array[Vector2i] = grid.blue_spawns if team == SimUnit.Team.BLUE else grid.red_spawns
+	if spawns.is_empty():
+		return
+	order_move(team, unit_ids, spawns[0])
 
 
 func is_valid_cast_target(unit: SimUnit, ability: AbilityStats, target: SimUnit) -> bool:
@@ -350,11 +378,19 @@ func _update_target(unit: SimUnit) -> void:
 		var lost: bool = not _is_valid_target(unit, target)
 		if not lost and not unit.target_forced and unit.has_home:
 			lost = SimUnit.cell_center(unit.home_cell).distance_to(target.pos) > unit.leash_radius + EPSILON
+		if not lost and unit.guarding:
+			lost = not can_hit(unit, target)  # guards only shoot what they can reach
 		if lost:
 			unit.attack_target_id = -1
 			unit.target_forced = false
 			_clear_destination(unit)
 			unit.path.clear()
+	if unit.attack_target_id == -1 and not unit.is_moving() and unit.can_attack() and unit.guarding:
+		var in_reach: SimUnit = _nearest_enemy_within(unit, unit.stats.attack_range)
+		if in_reach != null:
+			unit.attack_target_id = in_reach.id
+			unit.target_forced = false
+		return
 	if unit.attack_target_id == -1 and not unit.is_moving() and unit.can_attack():
 		var nearest: SimUnit = _nearest_enemy_within(unit, maxf(unit.stats.acquire_range, unit.stats.attack_range))
 		if nearest != null:
@@ -422,8 +458,8 @@ func _nearest_enemy_within(unit: SimUnit, max_dist: float) -> SimUnit:
 ## sight), re-planning as it moves.
 func _chase(unit: SimUnit) -> void:
 	var target: SimUnit = _engaged_target(unit)
-	if target == null:
-		return
+	if target == null or (unit.guarding and not unit.is_casting()):
+		return  # guards never move to a target
 	if _in_reach(unit, target):
 		if unit.has_destination or not unit.path.is_empty():
 			unit.path.clear()  # finish the current step, then stop and fire
@@ -570,6 +606,11 @@ func _fight_back(unit: SimUnit, attacker: SimUnit) -> void:
 	if unit.attack_target_id != -1 or unit.is_moving() or unit.is_casting() or not unit.can_attack():
 		return
 	if not unit.can_act() or unit.hp <= 0:
+		return
+	if unit.guarding:
+		if can_hit(unit, attacker):
+			unit.attack_target_id = attacker.id
+			unit.target_forced = false
 		return
 	var reach: float = maxf(unit.stats.acquire_range, unit.pos.distance_to(attacker.pos)) + LEASH
 	if unit.has_home:

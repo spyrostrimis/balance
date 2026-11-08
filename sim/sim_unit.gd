@@ -48,6 +48,10 @@ var cooldown_left: float = 0.0
 var chase_cell: Vector2i = Vector2i(-1, -1)
 var chase_timer: int = 0
 
+## Guard order: holds its spot, fires only at enemies already in range and sight,
+## never chases. Cleared by move, attack and ability orders.
+var guarding: bool = false
+
 ## Post: where the unit stood when it engaged on its own (it walks back there
 ## when the enemy gets away or is gone). Cleared by player orders.
 var has_home: bool = false
