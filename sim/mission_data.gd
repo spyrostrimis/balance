@@ -10,3 +10,7 @@ extends Resource
 ## The human player's team; the other teams are AI (their heroes get recovered).
 @export var player_team: SimUnit.Team = SimUnit.Team.BLUE
 @export var hero_rules: HeroRules
+## Capture-and-hold objective at the map's Orichalcum rock (null = none).
+@export var objective: ObjectiveRules
+## AI for every non-player team (null = no AI).
+@export var ai_rules: AiRules

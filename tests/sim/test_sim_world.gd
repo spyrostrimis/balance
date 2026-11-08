@@ -351,6 +351,7 @@ func test_mission_01_spawns_hero_and_three_troops_per_side() -> void:
 func test_mission_01_whole_blue_team_crosses_the_map() -> void:
 	var world: SimWorld = SimWorld.new()
 	assert_str(world.setup_mission(load(MISSION_PATH) as MissionData)).is_empty()
+	world.ai.clear()  # movement only: Red stays put
 	var blue: Array[SimUnit] = []
 	for unit: SimUnit in world.units:
 		if unit.team == BLUE:

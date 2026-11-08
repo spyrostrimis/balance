@@ -32,6 +32,11 @@ extends RefCounted
 ## mission failed (outcome DEFEAT). A downed AI hero is fetched by a recovery
 ## unit (SimRecovery: untargetable, unblockable), carried off the map, and
 ## returns at its start area after rules.return_seconds.
+##
+## Mission (design/GDD.md -> Mission 1): a CaptureObjective at the rock (hold it
+## to win), plus: player's hero downed = DEFEAT; every enemy troop dead while
+## the enemy hero is down = VICTORY. Non-player teams are run by EnemyAi, which
+## queues commands at the start of each tick.
 
 const TICKS_PER_SECOND: int = 15
 const TICK_SECONDS: float = 1.0 / TICKS_PER_SECOND
@@ -45,12 +50,19 @@ const CHASE_REPLAN_TICKS: int = 5
 ## An auto-picked target is dropped beyond acquire_range + this many cells.
 const LEASH: float = 1.5
 
-enum Outcome { NONE, DEFEAT }
+## From the player's point of view.
+enum Outcome { NONE, VICTORY, DEFEAT }
+enum Reason { NONE, HERO_DOWN, ROCK_HELD, ENEMY_ROUTED }
 
 ## The human player's team; every other team is AI.
 var player_team: SimUnit.Team = SimUnit.Team.BLUE
 var rules: HeroRules = HeroRules.new()
 var outcome: Outcome = Outcome.NONE
+var outcome_reason: Reason = Reason.NONE
+## Capture-and-hold objective (null if the mission has none).
+var objective: CaptureObjective
+## AI players, run at the start of every tick.
+var ai: Array[EnemyAi] = []
 ## Recovery units on their way (not units: never targeted or blocked).
 var recoveries: Array[SimRecovery] = []
 var grid: MapGrid = MapGrid.new()
@@ -98,7 +110,16 @@ func setup_mission(data: MissionData) -> String:
 	err = _spawn_roster(data.blue_roster, SimUnit.Team.BLUE, grid.blue_spawns)
 	if err != "":
 		return err
-	return _spawn_roster(data.red_roster, SimUnit.Team.RED, grid.red_spawns)
+	err = _spawn_roster(data.red_roster, SimUnit.Team.RED, grid.red_spawns)
+	if err != "":
+		return err
+	if data.objective != null and not grid.deposits.is_empty():
+		objective = CaptureObjective.new(grid, grid.deposits[0], data.objective)
+	if data.ai_rules != null:
+		for team: SimUnit.Team in [SimUnit.Team.BLUE, SimUnit.Team.RED]:
+			if team != player_team:
+				ai.append(EnemyAi.new(team, data.ai_rules))
+	return ""
 
 
 ## Spawns a unit on a free cell. Returns null if the cell isn't free.
@@ -138,6 +159,8 @@ func step() -> void:
 		for i: int in unit.ability_cooldowns.size():
 			if unit.ability_cooldowns[i] > 0:
 				unit.ability_cooldowns[i] -= 1
+	for controller: EnemyAi in ai:
+		controller.update(self)
 	var commands: Array[SimCommand] = _pending
 	_pending = []
 	for command: SimCommand in commands:
@@ -153,6 +176,8 @@ func step() -> void:
 	_resolve_combat()
 	_update_away_heroes()  # before recoveries: a hero leaving this tick starts its full countdown
 	_update_recoveries()
+	_update_objective()
+	_check_routed()
 
 
 ## Orders units of `team` towards `target` (called by MoveCommand on a tick).
@@ -579,14 +604,52 @@ func _down(unit: SimUnit) -> void:
 ## The player's hero down = mission failed; an AI hero gets a recovery unit.
 func _on_hero_downed(hero: SimUnit) -> void:
 	if hero.team == player_team:
-		if outcome == Outcome.NONE:
-			outcome = Outcome.DEFEAT
-			events.append(CombatEvent.new(CombatEvent.Kind.MISSION_FAILED, hero.id, -1))
+		_end(Outcome.DEFEAT, Reason.HERO_DOWN, hero.id)
 		return
 	var recovery: SimRecovery = SimRecovery.new(_next_recovery_id, hero.team, hero.id, recovery_entry(hero.team))
 	_next_recovery_id += 1
 	recoveries.append(recovery)
 	events.append(CombatEvent.new(CombatEvent.Kind.RECOVERY_SENT, hero.id, recovery.id))
+
+
+## Ends the mission once (later results are ignored).
+func _end(result: Outcome, reason: Reason, unit_id: int = -1) -> void:
+	if outcome != Outcome.NONE:
+		return
+	outcome = result
+	outcome_reason = reason
+	var kind: CombatEvent.Kind = CombatEvent.Kind.MISSION_WON if result == Outcome.VICTORY \
+			else CombatEvent.Kind.MISSION_FAILED
+	events.append(CombatEvent.new(kind, unit_id, -1, reason))
+
+
+func _update_objective() -> void:
+	if objective == null:
+		return
+	var captured: int = objective.update(units)
+	if captured != CaptureObjective.NO_TEAM:
+		events.append(CombatEvent.new(CombatEvent.Kind.ROCK_CAPTURED, -1, captured))
+	var holder: int = objective.winner()
+	if holder != CaptureObjective.NO_TEAM:
+		_end(Outcome.VICTORY if holder == player_team else Outcome.DEFEAT, Reason.ROCK_HELD)
+
+
+## Player wins when an enemy team has no troops left and its heroes are all down.
+func _check_routed() -> void:
+	for team: SimUnit.Team in [SimUnit.Team.BLUE, SimUnit.Team.RED]:
+		if team == player_team:
+			continue
+		var standing: bool = false
+		var seen: bool = false
+		for unit: SimUnit in units:
+			if unit.team != team:
+				continue
+			seen = true
+			if not unit.stats.is_hero or not unit.downed:
+				standing = true
+				break
+		if seen and not standing:
+			_end(Outcome.VICTORY, Reason.ENEMY_ROUTED)
 
 
 ## Where a team's recovery units enter and leave: beyond the map edge, out

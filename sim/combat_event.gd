@@ -18,8 +18,12 @@ enum Kind {
 	HERO_AWAY,
 	## Hero unit_id is back on the map at its start area.
 	HERO_RETURNED,
-	## The player's hero (unit_id) is down: the mission is lost.
+	## The mission is lost; `amount` = SimWorld.Reason (unit_id = the downed hero, if any).
 	MISSION_FAILED,
+	## The mission is won; `amount` = SimWorld.Reason.
+	MISSION_WON,
+	## Team other_id took the rock.
+	ROCK_CAPTURED,
 }
 
 var kind: Kind = Kind.SHOT

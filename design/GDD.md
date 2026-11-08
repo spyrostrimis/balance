@@ -226,12 +226,38 @@ engage range they raise the alarm (e.g. call nearby units).
   infantry 2.0, light vehicle 3.0. Both sides use the same troops; the two Leaders
   share stats until their abilities are added.
 - No base, no economy, no buildings.
-- Objective **(proposal)**: standing in the capture zone around the rock with no enemy
-  units in it fills a capture bar; hold the rock for 60 seconds to win.
-- Win **(proposal)**: capture and hold the rock, OR destroy all enemy troops while their
-  hero is downed.
-- Lose: your hero is downed, OR the enemy captures and holds the rock.
+- **Capture zone** (decided): the open cells within **2 cells** of the rock.
+- **Objective — strict hold** (decided, milestone 7):
+  - **Capture:** a side whose units (up, not downed) are the only ones in the zone
+    for **10 s** takes the rock.
+  - **Hold:** the owner then needs **60 s with no enemy in the zone**. Any enemy
+    unit entering the zone resets the hold timer to 0.
+  - Details **(proposal)**: while both sides are in the zone the capture bar pauses;
+    a side with no units in the zone loses its capture progress. The owner doesn't
+    have to stay in the zone to hold it — only enemies matter. If the other side
+    captures the rock, it becomes the owner and starts its own hold.
+- **Win** (decided): hold the rock for 60 s, OR every enemy troop is dead while the
+  enemy hero is down or off the field.
+- **Lose** (decided): your hero is downed, OR the enemy holds the rock for 60 s.
+  Losing all your troops is not a defeat by itself.
 - Downing the enemy hero should be the natural way to win the rock.
+- **Screens:** a start screen with the briefing and objectives (the game waits for
+  "Start"), and an end screen (Victory / Defeat, why, time, units lost and
+  destroyed) with Restart / Quit.
+
+### Enemy AI (Mission 1, milestone 7)
+- Decided: the AI hero **pulls back below 25% HP**: it walks to its start area and
+  stays out of the fight (Red has no healing), fighting only if attacked there.
+  Once recovered (back from a downing at full HP) it joins the fight again.
+- Proposals:
+  - After a short pause at the start (3 s) the whole army advances to the rock to
+    contest it.
+  - **Focus fire:** all its fighters attack the same enemy: the one with the least
+    HP among enemies near the rock or near its army. It re-picks when that target
+    dies or leaves.
+  - **Heavy Cannon** as soon as it's ready and an enemy is in range, aimed at the
+    enemy with the most other enemies around it (splash), then the weakest.
+  - It thinks 3 times a second and only uses the same orders the player has.
 
 ## Open questions
 - Real names for the four factions and the heroes.

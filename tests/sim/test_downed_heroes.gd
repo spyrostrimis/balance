@@ -92,6 +92,7 @@ func test_player_hero_down_fails_the_mission() -> void:
 func test_ai_hero_down_sends_a_recovery_unit_not_a_unit() -> void:
 	var world: SimWorld = _world()
 	var hero: SimUnit = world.spawn_unit(_hero, RED, Vector2i(5, 4))
+	world.spawn_unit(_soldier, RED, Vector2i(11, 7))  # a Red troop left: not routed
 	_down_by_shot(world, hero)
 	var events: Array[CombatEvent] = _run(world, 1)
 	assert_int(world.outcome).is_equal(SimWorld.Outcome.NONE)
