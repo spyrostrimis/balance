@@ -46,12 +46,8 @@ func setup(hero: SimUnit, is_read_only: bool = false) -> void:
 	read_only = is_read_only
 	name = "HeroPanel"
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = PANEL_COLOR
-	style.set_corner_radius_all(8)
-	style.set_content_margin_all(10.0)
+	var style: StyleBoxFlat = HudTheme.well()
 	style.border_color = UnitView.TEAM_COLORS[hero.team].darkened(0.2)
-	style.set_border_width_all(2)
 	add_theme_stylebox_override("panel", style)
 	_style = style
 	_border_color = style.border_color

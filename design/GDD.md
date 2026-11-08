@@ -211,7 +211,7 @@ Decided: two looks, one per campaign setting. Each look is one art family.
 - Asset sources for now: Kenney, Quaternius, KayKit. Paid packs maybe later.
   The CC0-only rule is dropped; every asset is credited in `assets/CREDITS.md`.
 
-Commands for the Desert sidebar **(proposal)**:
+Commands for the Desert sidebar (built in milestone 8; rules **(proposal)**):
 - **Retreat:** the selected units walk back to their start area and don't fight
   on the way.
 - **Guard:** the selected units hold their spot: they fire at enemies in range but

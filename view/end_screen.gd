@@ -24,9 +24,15 @@ func setup(is_victory: bool, reason: String, details: PackedStringArray) -> void
 	var center: CenterContainer = CenterContainer.new()
 	add_child(center)
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var panel: PanelContainer = PanelContainer.new()
+	var frame: StyleBoxFlat = HudTheme.frame()
+	frame.set_content_margin_all(32.0)
+	frame.border_color = VICTORY_COLOR if victory else DEFEAT_COLOR
+	panel.add_theme_stylebox_override("panel", frame)
+	center.add_child(panel)
 	var box: VBoxContainer = VBoxContainer.new()
 	box.add_theme_constant_override("separation", 16)
-	center.add_child(box)
+	panel.add_child(box)
 	box.add_child(_label("VICTORY" if victory else "MISSION FAILED", 72,
 			VICTORY_COLOR if victory else DEFEAT_COLOR, 12))
 	box.add_child(_label(reason, 30, Color.WHITE, 6))
@@ -52,9 +58,8 @@ func _label(text: String, size: int, color: Color, outline: int) -> Label:
 
 
 func _button(text: String, sig: Signal) -> Button:
-	var button: Button = Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(200.0, 60.0)
+	var button: Button = HudTheme.make_button(text.to_upper())
+	button.custom_minimum_size = Vector2(220.0, 60.0)
 	button.add_theme_font_size_override("font_size", 28)
 	button.pressed.connect(func() -> void: sig.emit())
 	return button

@@ -42,9 +42,16 @@ fighting for control of the Orichalcum rock in the middle. Spec: `design/GDD.md`
   (window size override), resizable. Stretch mode `canvas_items`, aspect `expand`
   (UI scales; 3D renders at native resolution, so it's sharp at 1080p, 1440p and 4K).
   F11 and Alt+Enter toggle full screen; Esc leaves full screen
-  (`view/app.gd`, autoload `App`). F3 toggles a debug overlay (`App.debug_overlay`)
+  (`view/app.gd`, autoload `App`). F10 or the OPTIONS button pauses (Options
+  menu with the controls). F3 toggles a debug overlay (`App.debug_overlay`)
   for things that are invisible in the game, e.g. aura radii — never show those
   without it.
+- HUD (Desert, Dune II layout): top bar (Options, mission name, clock), right
+  sidebar (objective, hero panel, selection, ATTACK / MOVE / RETREAT / GUARD,
+  minimap), styled by `view/hud_theme.gd` with the player's team colour as accent.
+- Looks: `data/looks/<id>.tres` (`view/look.gd`) picks unit models
+  (`view/unit_visual.gd`), terrain style, boulders, lighting and camera angle;
+  the mission's `look` field chooses one.
 - Art: two looks, one per campaign setting (design/GDD.md → Art direction):
   **Desert** = Dune II feel made in 2026 (sand and rock, chunky vehicles, Dune II
   UI layout, modern lighting/effects); **Forest** = Warcraft III: Reforged feel
@@ -100,10 +107,11 @@ stdout/stderr reach the terminal). In Git Bash: `/c/Godot/Godot_v4.7.2-stable_wi
   `user://selftest/` and prints the absolute path. Optional `--shots=N` (default 3).
   Before each shot `App.selftest_shot` fires; the mission scene snaps the camera to
   5 poses in turn (Blue on the way, the fight twice, whole map, aftermath), so use `--frames=500 --shots=5`. In self-test the sim runs exactly one
-  tick per frame (deterministic). Shot 1 shows the start screen; the mission
-  starts right after it. The mission scene selects all Blue units, checks
-  picking/box selection, and sends them to the rock; Red is played by its AI. The
-  Blue Leader uses Repair through the targeting UI whenever it's ready. Shot 2
+  tick per frame (deterministic). The mission is the Desert one (you are Red).
+  Shot 1 shows the start screen; the mission starts right after it. The mission
+  scene selects all the player's units, checks picking/box selection, and sends
+  them to the rock; Blue is played by its AI. The player's Leader uses its active
+  ability through the targeting UI whenever it's ready. Shot 2
   shows the Red Leader inspected (read-only hero panel) or the recovery dropship
   if one is flying, shot 3 has the F3 debug overlay on. The fight usually ends
   within ~400 frames; the end screen (with its reason and numbers) is logged.

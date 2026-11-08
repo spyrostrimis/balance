@@ -11,6 +11,8 @@ extends Control
 ##   Esc: clear selection.
 ##   Q (action ability_1): target the player hero's first active ability, then
 ##   left click a valid unit to use it. Right click / Esc cancels.
+##   Sidebar commands: Attack (then left click an enemy), Move (then left click
+##   the ground), Retreat (R) and Guard (G) act on the selection at once.
 ## Orders go to the sim as commands; this node never changes sim state directly.
 
 signal selection_changed(count: int)
@@ -18,6 +20,10 @@ signal selection_changed(count: int)
 signal targeting_changed(index: int, prompt: String)
 ## The enemy unit the player is looking at changed (null = none).
 signal inspect_changed(view: UnitView)
+## Attack / Move command waiting for a click started (mode, prompt) or ended (NONE, "").
+signal command_mode_changed(mode: int, prompt: String)
+
+enum Mode { NONE, ATTACK, MOVE }
 
 const DRAG_THRESHOLD_PX: float = 6.0
 const BOX_FILL: Color = Color(0.3, 1.0, 0.35, 0.12)
@@ -38,6 +44,8 @@ var hero_view: UnitView
 var _targeting: int = -1
 ## Enemy unit being looked at, or null.
 var inspected: UnitView
+## Attack / Move button pressed: the next left click picks the target.
+var mode: Mode = Mode.NONE
 
 var _views: Array[UnitView] = []
 var _selected: Array[UnitView] = []
@@ -68,6 +76,19 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _targeting != -1 and _targeting_input(event):
 		get_viewport().set_input_as_handled()
 		return
+	if mode != Mode.NONE and _command_input(event):
+		get_viewport().set_input_as_handled()
+		return
+	var hotkey: InputEventKey = event as InputEventKey
+	if hotkey != null and hotkey.pressed and not hotkey.echo and not hotkey.ctrl_pressed and not hotkey.alt_pressed:
+		if hotkey.physical_keycode == KEY_G:
+			guard_selected()
+			get_viewport().set_input_as_handled()
+			return
+		if hotkey.physical_keycode == KEY_R:
+			retreat_selected()
+			get_viewport().set_input_as_handled()
+			return
 	var mb: InputEventMouseButton = event as InputEventMouseButton
 	if mb != null:
 		if mb.button_index == MOUSE_BUTTON_LEFT:
@@ -127,6 +148,79 @@ func _targeting_input(event: InputEvent) -> bool:
 	return false
 
 
+## Attack / Move mode: left click picks the target, right click / Esc cancels.
+func _command_input(event: InputEvent) -> bool:
+	var mb: InputEventMouseButton = event as InputEventMouseButton
+	if mb != null and mb.pressed:
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mode == Mode.ATTACK:
+				var enemy: UnitView = unit_at(mb.position, false)
+				if enemy != null and enemy.unit.team != player_team and enemy.unit.can_act():
+					order_attack(enemy)
+					cancel_command()
+				else:
+					_show_marker_at_screen(mb.position)
+			else:
+				order_move_at(mb.position)
+				cancel_command()
+			return true
+		if mb.button_index == MOUSE_BUTTON_RIGHT:
+			cancel_command()
+			return true
+	if mb != null and not mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+		return true
+	var key: InputEventKey = event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_ESCAPE:
+		cancel_command()
+		return true
+	return false
+
+
+## Attack or Move button: wait for a click (needs a selection).
+func begin_command(new_mode: Mode) -> bool:
+	if _selected.is_empty() or new_mode == Mode.NONE:
+		return false
+	cancel_ability()
+	mode = new_mode
+	_pressing = false
+	_dragging = false
+	Input.set_default_cursor_shape(Input.CURSOR_CROSS)
+	var prompt: String = "Attack: left click an enemy unit." if mode == Mode.ATTACK else "Move: left click the ground."
+	command_mode_changed.emit(mode, prompt + "   Right click / Esc: cancel")
+	return true
+
+
+func cancel_command() -> void:
+	if mode == Mode.NONE:
+		return
+	mode = Mode.NONE
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	command_mode_changed.emit(Mode.NONE, "")
+
+
+func selected_ids() -> Array[int]:
+	var ids: Array[int] = []
+	for view: UnitView in _selected:
+		ids.append(view.unit.id)
+	return ids
+
+
+## Retreat button / R: the selection walks back to the start area.
+func retreat_selected() -> void:
+	if _selected.is_empty():
+		return
+	world.queue_command(RetreatCommand.new(player_team, selected_ids()))
+
+
+## Guard button / G: the selection holds its ground.
+func guard_selected() -> void:
+	if _selected.is_empty():
+		return
+	for view: UnitView in _selected:
+		_show_marker(view.unit.cell(), true)
+	world.queue_command(GuardCommand.new(player_team, selected_ids()))
+
+
 func is_targeting() -> bool:
 	return _targeting != -1
 
@@ -142,6 +236,7 @@ func begin_ability(index: int) -> bool:
 	var ability: AbilityStats = hero_view.unit.ability(index)
 	if ability == null or not ability.is_active() or not hero_view.unit.ability_ready(index):
 		return false
+	cancel_command()
 	_targeting = index
 	_pressing = false
 	_dragging = false

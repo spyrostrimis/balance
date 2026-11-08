@@ -5,7 +5,7 @@ extends Control
 
 signal start_pressed
 
-const TITLE_COLOR: Color = Color(1.0, 0.82, 0.3)
+const TITLE_COLOR: Color = HudTheme.BRASS
 
 
 func setup(title: String, briefing: String, objectives: PackedStringArray) -> void:
@@ -19,10 +19,15 @@ func setup(title: String, briefing: String, objectives: PackedStringArray) -> vo
 	var center: CenterContainer = CenterContainer.new()
 	add_child(center)
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var panel: PanelContainer = PanelContainer.new()
+	var frame: StyleBoxFlat = HudTheme.frame()
+	frame.set_content_margin_all(28.0)
+	panel.add_theme_stylebox_override("panel", frame)
+	center.add_child(panel)
 	var box: VBoxContainer = VBoxContainer.new()
 	box.custom_minimum_size = Vector2(1000.0, 0.0)
 	box.add_theme_constant_override("separation", 14)
-	center.add_child(box)
+	panel.add_child(box)
 	box.add_child(_label(title, 60, TITLE_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
 	var text: Label = _label(briefing, 24, Color(0.9, 0.9, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -32,9 +37,8 @@ func setup(title: String, briefing: String, objectives: PackedStringArray) -> vo
 		var item: Label = _label("•  " + line, 24, Color.WHITE, HORIZONTAL_ALIGNMENT_LEFT)
 		item.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(item)
-	var button: Button = Button.new()
-	button.text = "Start"
-	button.custom_minimum_size = Vector2(240.0, 64.0)
+	var button: Button = HudTheme.make_button("START", "Enter / Space")
+	button.custom_minimum_size = Vector2(260.0, 64.0)
 	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	button.add_theme_font_size_override("font_size", 30)
 	button.pressed.connect(func() -> void: start_pressed.emit())

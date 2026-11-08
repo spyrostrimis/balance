@@ -17,8 +17,6 @@ const MAX_TICKS_PER_FRAME: int = 5
 @onready var units_root: Node3D = $Units
 @onready var rts_camera: RTSCamera = $RTSCamera
 @onready var selection: SelectionController = $UI/Selection
-@onready var fps_label: Label = $UI/FpsLabel
-@onready var selection_label: Label = $UI/SelectionLabel
 @onready var health_bars: HealthBars = $UI/HealthBars
 @onready var effects: Node3D = $Effects
 
@@ -37,6 +35,11 @@ var _recovery_views: Dictionary[int, RecoveryView] = {}
 var _start_screen: StartScreen
 var _end_screen: EndScreen
 var _objective_panel: ObjectivePanel
+var _top_bar: TopBar
+var _sidebar: Sidebar
+var _pause_menu: PauseMenu
+var _paused: bool = false
+var _mission_name: String = ""
 ## The sim only runs after Start.
 var _started: bool = false
 ## Units that died per team (for the end screen).
@@ -81,16 +84,20 @@ func _ready() -> void:
 	selection.set_unit_views(unit_views.duplicate())
 	health_bars.camera = rts_camera.camera
 	health_bars.views = unit_views
+	_mission_name = "Mission 1 — %s" % data.display_name
+	HudTheme.accent = UnitView.TEAM_COLORS[world.player_team]
+	_build_hud()
 	selection.selection_changed.connect(_on_selection_changed)
-	_on_selection_changed(0)
 	_build_hero_hud()
+	_sidebar.hold_hero_panel(hero_panel)
+	_on_selection_changed(0)
 	_alerts = Alerts.new()
 	$UI.add_child(_alerts)
-	_alerts.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	_alerts.offset_left = -700.0
-	_alerts.offset_right = 700.0
-	_alerts.offset_top = 130.0
-	_alerts.offset_bottom = 330.0
+	_alerts.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_alerts.offset_left = 24.0
+	_alerts.offset_right = -Sidebar.WIDTH - 24.0
+	_alerts.offset_top = 80.0
+	_alerts.offset_bottom = 280.0
 	_warning = LowHpWarning.new(world.rules.low_hp_warning_fraction)
 	_warning_sound = AudioStreamPlayer.new()
 	_warning_sound.stream = Sounds.warning()
@@ -100,12 +107,7 @@ func _ready() -> void:
 		var zone: ZoneView = ZoneView.new()
 		map_view.add_child(zone)
 		zone.setup(world.objective)
-		_objective_panel = ObjectivePanel.new()
-		$UI.add_child(_objective_panel)
-		_objective_panel.setup(world.objective)
-		_objective_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
-		_objective_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-		_objective_panel.offset_top = 64.0
+		_objective_panel = _sidebar.objective_panel
 	_show_start_screen(data)
 
 	if App.is_selftest:
@@ -118,7 +120,7 @@ func _process(delta: float) -> void:
 	_frame += 1
 	if App.is_selftest and not _started and _selftest_start_frame != -1 and _frame >= _selftest_start_frame:
 		_start_mission()
-	if not _started:
+	if not _started or _paused:
 		_tick_accumulator = 0.0
 	elif App.is_selftest:
 		# Deterministic: exactly one sim tick per frame, whatever the frame rate.
@@ -152,7 +154,8 @@ func _process(delta: float) -> void:
 	_fps_timer -= delta
 	if _fps_timer <= 0.0:
 		_fps_timer = 0.5
-		fps_label.text = "%d FPS" % Engine.get_frames_per_second()
+		_top_bar.set_fps(Engine.get_frames_per_second())
+	_top_bar.set_time(world.tick / SimWorld.TICKS_PER_SECOND)
 
 
 func _handle_events() -> void:
@@ -244,8 +247,6 @@ func _build_hero_hud() -> void:
 	hero_panel = HeroPanel.new()
 	$UI.add_child(hero_panel)
 	hero_panel.setup(_player_hero.unit)
-	hero_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 16)
-	hero_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	hero_panel.ability_pressed.connect(func(index: int) -> void: selection.begin_ability(index))
 	hero_panel.portrait_clicked.connect(_on_portrait_clicked)
 	selection.inspect_changed.connect(_on_inspect_changed)
@@ -257,11 +258,11 @@ func _build_hero_hud() -> void:
 	_target_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_target_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	$UI.add_child(_target_hint)
-	_target_hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	_target_hint.offset_left = -700.0
-	_target_hint.offset_right = 700.0
-	_target_hint.offset_top = -300.0
-	_target_hint.offset_bottom = -260.0
+	_target_hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	_target_hint.offset_left = 24.0
+	_target_hint.offset_right = -Sidebar.WIDTH - 24.0
+	_target_hint.offset_top = -90.0
+	_target_hint.offset_bottom = -50.0
 	selection.targeting_changed.connect(func(index: int, prompt: String) -> void:
 		_target_hint.text = prompt
 		hero_panel.set_armed(index))
@@ -366,8 +367,75 @@ func _show_end(victory: bool, reason: SimWorld.Reason) -> void:
 		App.selftest_note("end screen: %s; %s; %s" % ["VICTORY" if victory else "DEFEAT", why, " / ".join(details)])
 
 
+## Dune II-style HUD: top bar, right sidebar (objective, hero, commands,
+## minimap) and the Options menu.
+func _build_hud() -> void:
+	_top_bar = TopBar.new()
+	$UI.add_child(_top_bar)
+	_top_bar.setup(_mission_name)
+	_top_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE, Control.PRESET_MODE_MINSIZE)
+	_top_bar.options_pressed.connect(_toggle_pause)
+	_sidebar = Sidebar.new()
+	$UI.add_child(_sidebar)
+	_sidebar.setup(world, rts_camera.camera)
+	_sidebar.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE, Control.PRESET_MODE_MINSIZE)
+	_sidebar.offset_top = _top_bar.get_combined_minimum_size().y
+	_sidebar.offset_left = -Sidebar.WIDTH
+	_sidebar.command_pressed.connect(_on_command)
+	_sidebar.minimap.look_at_requested.connect(func(pos: Vector3) -> void:
+		rts_camera.snap_to(pos, rts_camera.get_distance()))
+	_sidebar.minimap.move_requested.connect(func(cell: Vector2i) -> void: selection.order_move(cell))
+	selection.command_mode_changed.connect(func(_mode: int, prompt: String) -> void:
+		_sidebar.set_prompt(prompt))
+
+
+func _on_command(command: StringName) -> void:
+	match command:
+		&"attack":
+			selection.begin_command(SelectionController.Mode.ATTACK)
+		&"move":
+			selection.begin_command(SelectionController.Mode.MOVE)
+		&"retreat":
+			selection.retreat_selected()
+		&"guard":
+			selection.guard_selected()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key: InputEventKey = event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_F10 and _started and _end_screen == null:
+		_toggle_pause()
+		get_viewport().set_input_as_handled()
+
+
+## Options menu: pauses the sim while open.
+func _toggle_pause() -> void:
+	if _pause_menu != null:
+		_pause_menu.queue_free()
+		_pause_menu = null
+		_paused = false
+		return
+	if _end_screen != null:
+		return
+	_paused = true
+	_pause_menu = PauseMenu.new()
+	$UI.add_child(_pause_menu)
+	_pause_menu.setup()
+	_pause_menu.resume_pressed.connect(_toggle_pause)
+	_pause_menu.restart_pressed.connect(func() -> void: get_tree().reload_current_scene())
+	_pause_menu.quit_pressed.connect(func() -> void: get_tree().quit())
+
+
 func _on_selection_changed(count: int) -> void:
-	selection_label.text = "Selected: %d" % count if count > 0 else ""
+	var names: Dictionary[String, int] = {}
+	for view: UnitView in selection.selected_views():
+		var n: String = view.unit.stats.display_name
+		names[n] = names.get(n, 0) + 1
+	var parts: PackedStringArray = PackedStringArray()
+	for n: String in names:
+		parts.append(n if names[n] == 1 else "%d× %s" % [names[n], n])
+	if _sidebar != null:
+		_sidebar.set_selection_text(count, ", ".join(parts))
 
 
 ## The look's environment (sky, fog, grading) and sun.

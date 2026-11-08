@@ -6,7 +6,7 @@ extends PanelContainer
 const TEAM_NAMES: Dictionary[int, String] = {SimUnit.Team.BLUE: "Blue", SimUnit.Team.RED: "Red"}
 const NEUTRAL_COLOR: Color = Color(0.75, 0.75, 0.8)
 const CONTESTED_COLOR: Color = Color(1.0, 0.6, 0.15)
-const BAR_SIZE: Vector2 = Vector2(360.0, 16.0)
+const BAR_SIZE: Vector2 = Vector2(120.0, 16.0)
 
 var objective: CaptureObjective
 
@@ -36,6 +36,8 @@ func setup(capture: CaptureObjective) -> void:
 	box.add_child(_title)
 	_status = Label.new()
 	_status.add_theme_font_size_override("font_size", 20)
+	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status.custom_minimum_size = Vector2(120.0, 0.0)
 	box.add_child(_status)
 	_bar = Control.new()
 	_bar.custom_minimum_size = BAR_SIZE
