@@ -2,7 +2,10 @@ class_name MapView
 extends Node3D
 ## Renders a MapGrid in 3D: GridMaps aligned 1:1 with the sim grid (ground layer +
 ## obstacle layer), the Orichalcum deposits and the land outside the map.
-## Placeholder art: generated low-poly meshes, no external assets.
+## Without a look: placeholder tiles. With the desert look: one seamless sand
+## shader over all ground tiles (dunes, ripples, rock plateaus near cliffs and
+## start areas, a copper Orichalcum field around the rock), sandstone cliffs and
+## the look's boulder models.
 
 const GROUND_COLORS: Array[Color] = [
 	Color(0.85, 0.60, 0.30), Color(0.83, 0.58, 0.29), Color(0.87, 0.62, 0.32),
@@ -15,6 +18,12 @@ const ORICHALCUM_COLOR: Color = Color(1.0, 0.42, 0.08)
 const GROUND_THICKNESS: float = 0.4
 const ROCK_VARIANTS: int = 3
 const CLIFF_VARIANTS: int = 3
+const DESERT_GROUND_SHADER: Shader = preload("res://view/shaders/desert_ground.gdshader")
+const DESERT_CLIFF_SHADER: Shader = preload("res://view/shaders/desert_cliff.gdshader")
+## Desert mask: rock plateau around start areas (cells) and next to cliffs.
+const START_ROCK_RADIUS: float = 3.6
+## Desert mask: Orichalcum field radius around a deposit (cells from its edge).
+const ORE_FIELD_RADIUS: float = 3.5
 
 var ground_map: GridMap
 var obstacle_map: GridMap
@@ -22,12 +31,16 @@ var obstacle_map: GridMap
 var _ground_items: Array[int] = []
 var _rock_items: Array[int] = []
 var _cliff_items: Array[int] = []
+var _look: Look
+var _desert: bool = false
 
 
-func build(grid: MapGrid) -> void:
+func build(grid: MapGrid, look: Look = null) -> void:
 	for child: Node in get_children():
 		child.queue_free()
-	var library: MeshLibrary = _build_library()
+	_look = look
+	_desert = look != null and look.terrain == &"desert"
+	var library: MeshLibrary = _build_library(grid)
 	ground_map = _make_gridmap("GroundMap", library)
 	obstacle_map = _make_gridmap("ObstacleMap", library)
 	var rotations: Array[int] = []
@@ -65,7 +78,7 @@ func _make_gridmap(node_name: String, library: MeshLibrary) -> GridMap:
 	return map
 
 
-func _build_library() -> MeshLibrary:
+func _build_library(grid: MapGrid) -> MeshLibrary:
 	var lib: MeshLibrary = MeshLibrary.new()
 	var next_id: int = 0
 	var cs: float = GridSpace.CELL_SIZE
@@ -73,7 +86,20 @@ func _build_library() -> MeshLibrary:
 	_rock_items.clear()
 	_cliff_items.clear()
 
-	for color: Color in GROUND_COLORS:
+	if _desert:
+		# Flat tiles (no sides): one seamless surface for the world-space shader.
+		var tile: PlaneMesh = PlaneMesh.new()
+		tile.size = Vector2(cs, cs)
+		tile.material = _desert_ground(grid, true)
+		lib.create_item(next_id)
+		lib.set_item_name(next_id, "sand")
+		lib.set_item_mesh(next_id, tile)
+		_ground_items.append(next_id)
+		next_id += 1
+	var ground_colors: Array[Color] = []
+	if not _desert:
+		ground_colors = GROUND_COLORS
+	for color: Color in ground_colors:
 		var box: BoxMesh = BoxMesh.new()
 		box.size = Vector3(cs, GROUND_THICKNESS, cs)
 		box.material = _material(color)
@@ -84,7 +110,9 @@ func _build_library() -> MeshLibrary:
 		_ground_items.append(next_id)
 		next_id += 1
 
-	for v: int in ROCK_VARIANTS:
+	if _desert and not _look.boulders.is_empty():
+		next_id = _add_boulder_items(lib, next_id)
+	for v: int in (0 if not _rock_items.is_empty() else ROCK_VARIANTS):
 		var rock: ArrayMesh = LowPoly.clamped_xz(
 				LowPoly.boulder(cs * (0.52 + 0.04 * v), cs * (0.75 + 0.15 * v), 100 + v), cs * 0.5)
 		rock.surface_set_material(0, _material(ROCK_COLOR))
@@ -98,7 +126,12 @@ func _build_library() -> MeshLibrary:
 		# Kept inside its own cell so cliffs never cover units standing next to them.
 		var cliff: ArrayMesh = LowPoly.clamped_xz(
 				LowPoly.cliff_block(Vector3(cs * 1.04, cs * (1.15 + 0.15 * v), cs * 1.04), 200 + v), cs * 0.5)
-		cliff.surface_set_material(0, _material(CLIFF_COLOR))
+		if _desert:
+			var sandstone: ShaderMaterial = ShaderMaterial.new()
+			sandstone.shader = DESERT_CLIFF_SHADER
+			cliff.surface_set_material(0, sandstone)
+		else:
+			cliff.surface_set_material(0, _material(CLIFF_COLOR))
 		lib.create_item(next_id)
 		lib.set_item_name(next_id, "cliff_%d" % v)
 		lib.set_item_mesh(next_id, cliff)
@@ -160,9 +193,82 @@ func _build_outside(map_size: Vector2i) -> MeshInstance3D:
 	var outside: MeshInstance3D = MeshInstance3D.new()
 	outside.name = "Outside"
 	outside.mesh = plane
-	outside.material_override = _material(OUTSIDE_COLOR)
+	outside.material_override = _desert_ground(null, false) if _desert else _material(OUTSIDE_COLOR)
 	outside.position = Vector3(rect.get_center().x, -0.05, rect.get_center().y)
 	return outside
+
+
+## The look's boulder models as GridMap items, each fitted inside one cell.
+func _add_boulder_items(lib: MeshLibrary, first_id: int) -> int:
+	var next_id: int = first_id
+	var cs: float = GridSpace.CELL_SIZE
+	for scene: PackedScene in _look.boulders:
+		var inst: Node3D = scene.instantiate() as Node3D
+		var meshes: Array[Node] = inst.find_children("*", "MeshInstance3D", true, false)
+		if meshes.is_empty():
+			inst.free()
+			continue
+		var mi: MeshInstance3D = meshes[0] as MeshInstance3D
+		var box: AABB = mi.get_aabb()
+		var s: float = cs * 0.92 / maxf(box.size.x, box.size.z)
+		var basis: Basis = Basis.IDENTITY.scaled(Vector3.ONE * s)
+		var center: Vector3 = box.get_center()
+		var offset: Vector3 = -(basis * Vector3(center.x, box.position.y, center.z))
+		var mesh: Mesh = mi.mesh.duplicate() as Mesh
+		for surface: int in mesh.get_surface_count():
+			var mat: Material = mi.get_active_material(surface)
+			if mat != null:
+				mesh.surface_set_material(surface, mat)
+		lib.create_item(next_id)
+		lib.set_item_name(next_id, "boulder_%d" % next_id)
+		lib.set_item_mesh(next_id, mesh)
+		lib.set_item_mesh_transform(next_id, Transform3D(basis, offset))
+		_rock_items.append(next_id)
+		next_id += 1
+		inst.free()
+	return next_id
+
+
+## Desert ground material. With a grid: per-cell mask (R = rock, G = Orichalcum).
+func _desert_ground(grid: MapGrid, with_mask: bool) -> ShaderMaterial:
+	var mat: ShaderMaterial = ShaderMaterial.new()
+	mat.shader = DESERT_GROUND_SHADER
+	mat.set_shader_parameter("use_mask", with_mask and grid != null)
+	if with_mask and grid != null:
+		mat.set_shader_parameter("mask", ImageTexture.create_from_image(desert_mask(grid)))
+		mat.set_shader_parameter("map_size_world", Vector2(grid.size()) * GridSpace.CELL_SIZE)
+	return mat
+
+
+## One pixel per cell: R = rock plateau (start areas, next to cliffs),
+## G = Orichalcum field strength around deposits.
+static func desert_mask(grid: MapGrid) -> Image:
+	var img: Image = Image.create(grid.width, grid.height, false, Image.FORMAT_RGBA8)
+	var starts: Array[Vector2] = []
+	for spawns: Array[Vector2i] in [grid.blue_spawns, grid.red_spawns]:
+		if spawns.is_empty():
+			continue
+		var sum: Vector2 = Vector2.ZERO
+		for c: Vector2i in spawns:
+			sum += Vector2(c) + Vector2(0.5, 0.5)
+		starts.append(sum / spawns.size())
+	for y: int in grid.height:
+		for x: int in grid.width:
+			var cell: Vector2i = Vector2i(x, y)
+			var center: Vector2 = Vector2(cell) + Vector2(0.5, 0.5)
+			var rock: float = 0.0
+			for s: Vector2 in starts:
+				rock = maxf(rock, 1.0 - smoothstep(START_ROCK_RADIUS - 1.0, START_ROCK_RADIUS + 0.5, center.distance_to(s)))
+			for dy: int in range(-1, 2):
+				for dx: int in range(-1, 2):
+					if grid.terrain_at(cell + Vector2i(dx, dy)) == MapGrid.Terrain.CLIFF:
+						rock = maxf(rock, 0.8)
+			var ore: float = 0.0
+			for d: Rect2i in grid.deposits:
+				var nearest: Vector2 = Vector2(clampf(center.x, d.position.x, d.end.x), clampf(center.y, d.position.y, d.end.y))
+				ore = maxf(ore, 1.0 - clampf(center.distance_to(nearest) / ORE_FIELD_RADIUS, 0.0, 1.0))
+			img.set_pixel(x, y, Color(rock, ore, 0.0, 1.0))
+	return img
 
 
 func _material(color: Color) -> StandardMaterial3D:

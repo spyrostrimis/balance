@@ -62,7 +62,8 @@ func _ready() -> void:
 	UnitView.current_look = load(look_path) as Look if ResourceLoader.exists(look_path) else null
 	if UnitView.current_look != null:
 		rts_camera.set_angle(UnitView.current_look.camera_pitch_degrees, UnitView.current_look.camera_fov_degrees)
-	map_view.build(world.grid)
+	map_view.build(world.grid, UnitView.current_look)
+	_apply_lighting(UnitView.current_look)
 	for unit: SimUnit in world.units:
 		var view: UnitView = UnitView.new()
 		units_root.add_child(view)
@@ -363,6 +364,18 @@ func _show_end(victory: bool, reason: SimWorld.Reason) -> void:
 
 func _on_selection_changed(count: int) -> void:
 	selection_label.text = "Selected: %d" % count if count > 0 else ""
+
+
+## The look's environment (sky, fog, grading) and sun.
+func _apply_lighting(look: Look) -> void:
+	if look == null:
+		return
+	if look.environment != null:
+		($WorldEnvironment as WorldEnvironment).environment = look.environment
+	var sun: DirectionalLight3D = $Sun as DirectionalLight3D
+	sun.light_color = look.sun_color
+	sun.light_energy = look.sun_energy
+	sun.rotation_degrees = look.sun_rotation_degrees
 
 
 func _enemy_team() -> SimUnit.Team:

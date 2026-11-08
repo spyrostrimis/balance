@@ -1,11 +1,16 @@
 [gd_resource type="Resource" script_class="Look" format=3]
 
 [ext_resource type="Resource" path="res://data/looks/desert/dropship.tres" id="1_gboxo"]
+[ext_resource type="PackedScene" path="res://assets/models/desert/rocks/Rock_1.gltf" id="1_upp35"]
+[ext_resource type="PackedScene" path="res://assets/models/desert/rocks/Rock_3.gltf" id="2_mu7fa"]
 [ext_resource type="Script" path="res://view/look.gd" id="2_n7rkk"]
 [ext_resource type="Script" path="res://view/unit_visual.gd" id="3_jcr5t"]
+[ext_resource type="PackedScene" path="res://assets/models/desert/rocks/Rock_Large_1.gltf" id="3_mcrue"]
 [ext_resource type="Resource" path="res://data/looks/desert/red_leader.tres" id="4_nmkia"]
+[ext_resource type="PackedScene" path="res://assets/models/desert/rocks/Rock_Large_2.gltf" id="4_pq8f5"]
 [ext_resource type="Resource" path="res://data/looks/desert/blue_leader.tres" id="5_6di2v"]
 [ext_resource type="Resource" path="res://data/looks/desert/infantry.tres" id="6_upp35"]
+[ext_resource type="Environment" path="res://data/looks/desert/environment.tres" id="6_vtimi"]
 [ext_resource type="Resource" path="res://data/looks/desert/light_vehicle.tres" id="7_mu7fa"]
 
 [resource]
@@ -20,3 +25,9 @@ units = Dictionary[StringName, ExtResource("3_jcr5t")]({
 dropship = ExtResource("1_gboxo")
 camera_pitch_degrees = 67.0
 camera_fov_degrees = 32.0
+terrain = &"desert"
+boulders = Array[PackedScene]([ExtResource("1_upp35"), ExtResource("2_mu7fa"), ExtResource("3_mcrue"), ExtResource("4_pq8f5")])
+environment = ExtResource("6_vtimi")
+sun_color = Color(1, 0.9, 0.75, 1)
+sun_energy = 1.35
+sun_rotation_degrees = Vector3(-55, -60, 0)
