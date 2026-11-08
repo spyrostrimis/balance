@@ -43,7 +43,7 @@ func _draw() -> void:
 	if camera == null:
 		return
 	for view: UnitView in views:
-		if not is_instance_valid(view) or view.unit.dead:
+		if not is_instance_valid(view) or view.unit.dead or not view.visible or view.unit.carried:
 			continue
 		var anchor: Vector3 = view.global_position + Vector3(0.0, view.bar_height(), 0.0)
 		if camera.is_position_behind(anchor):

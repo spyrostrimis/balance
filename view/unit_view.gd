@@ -47,6 +47,7 @@ var _silhouette: ShaderMaterial
 ## Holds the model parts (not the ring), so the model can fall over on its own.
 var _model: Node3D
 var _materials: Array[StandardMaterial3D] = []
+var _base_colors: Array[Color] = []
 var _dying: bool = false
 var _aura_rings: Array[Node3D] = []
 
@@ -95,6 +96,9 @@ func _build_model(stats: UnitStats, team: SimUnit.Team, with_silhouette: bool) -
 func sync(alpha: float, delta: float) -> void:
 	if _dying:
 		return
+	visible = not unit.away
+	if unit.away or unit.carried:
+		return  # off the map, or hanging under a recovery dropship (placed by the scene)
 	var p: Vector2 = unit.prev_pos.lerp(unit.pos, alpha)
 	position = GridSpace.gridf_to_world(p)
 	if unit.downed or delta <= 0.0:
@@ -138,6 +142,17 @@ func set_downed() -> void:
 	var tween: Tween = create_tween().set_parallel(true)
 	tween.tween_property(_model, "rotation:x", -PI * 0.47, 0.5).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(_model, "position:y", 0.45, 0.5)
+
+
+## Hero back from recovery: upright, full colour, visible again.
+func set_revived() -> void:
+	for i: int in _materials.size():
+		_materials[i].albedo_color = _base_colors[i]
+	_model.rotation = Vector3.ZERO
+	_model.position = Vector3.ZERO
+	visible = true
+	_refresh_aura_rings()
+	sync(1.0, 0.0)
 
 
 func pick_center() -> Vector3:
@@ -289,4 +304,5 @@ func _add_part(mesh: Mesh, color: Color, offset: Vector3) -> void:
 	part.material_override = mat
 	part.position = offset
 	_materials.append(mat)
+	_base_colors.append(color)
 	_model.add_child(part)

@@ -4,6 +4,7 @@ extends PanelContainer
 ## HP bar, and the ability bar (actives with hotkeys and cooldowns, then passive
 ## auras). Normally the player's hero; read-only for an enemy hero the player
 ## clicked on (tooltips only: that's how the player reads its passive).
+## `warning` (low HP) makes the portrait and border pulse red.
 ##   Click the portrait: select the hero (double click: also centre the camera).
 ##   While targeting a friendly ability (e.g. Repair), clicking the portrait
 ##   targets the hero itself.
@@ -18,6 +19,8 @@ const HOTKEYS: PackedStringArray = ["Q", "W", "E", "R"]
 
 var unit: SimUnit
 var read_only: bool = false
+## Low-HP warning: portrait and border pulse red.
+var warning: bool = false
 var buttons: Array[AbilityButton] = []
 
 var _portrait_model: UnitView
@@ -26,6 +29,8 @@ var _name_label: Label
 var _hp_bar: Control
 var _time: float = 0.0
 var _downed_shown: bool = false
+var _style: StyleBoxFlat
+var _border_color: Color = Color.WHITE
 
 
 ## Builds (or rebuilds) the panel for `hero`. Active abilities get hotkeys
@@ -48,6 +53,8 @@ func setup(hero: SimUnit, is_read_only: bool = false) -> void:
 	style.border_color = UnitView.TEAM_COLORS[hero.team].darkened(0.2)
 	style.set_border_width_all(2)
 	add_theme_stylebox_override("panel", style)
+	_style = style
+	_border_color = style.border_color
 
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
@@ -105,9 +112,26 @@ func _process(delta: float) -> void:
 		_portrait_model.rotation.y = PI + sin(_time * 0.7) * 0.3
 	if unit.downed and not _downed_shown:
 		_downed_shown = true
-		_portrait_box.modulate = Color(0.55, 0.5, 0.5)
 		_name_label.text = "%s — DOWN" % unit.stats.display_name
+	elif not unit.downed and _downed_shown:
+		_downed_shown = false
+		_name_label.text = unit.stats.display_name
+	if unit.downed:
+		_portrait_box.modulate = Color(0.55, 0.5, 0.5)
+		_set_border(_border_color, 2)
+	elif warning:
+		var pulse: float = 0.5 + 0.5 * sin(_time * 9.0)
+		_portrait_box.modulate = Color(1.0, 1.0 - 0.65 * pulse, 1.0 - 0.65 * pulse)
+		_set_border(_border_color.lerp(Color(1.0, 0.15, 0.1), pulse), 4)
+	else:
+		_portrait_box.modulate = Color.WHITE
+		_set_border(_border_color, 2)
 	_hp_bar.queue_redraw()
+
+
+func _set_border(color: Color, width: int) -> void:
+	_style.border_color = color
+	_style.set_border_width_all(width)
 
 
 func _draw_hp_bar() -> void:

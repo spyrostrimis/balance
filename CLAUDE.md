@@ -98,7 +98,11 @@ stdout/stderr reach the terminal). In Git Bash: `/c/Godot/Godot_v4.7.2-stable_wi
   tick per frame (deterministic). The mission scene selects all Blue units, checks
   picking/box selection, and orders an attack on the Red Leader. Heroes use their
   active ability whenever it's ready (Blue through the targeting UI). Shot 2 shows
-  the Red Leader inspected (read-only hero panel), shot 3 has the F3 debug overlay on.
+  the Red Leader inspected (read-only hero panel) or the recovery dropship if one is
+  flying, shot 3 has the F3 debug overlay on. The Red Leader starts at 60 HP so its
+  recovery runs early, and returns after 12 s instead of 60. The Blue Leader goes down
+  around frame 670: use `--frames=1000 --shots=10` to also see the low-HP warning and
+  the "Mission failed" screen (the sim stops there).
   It logs each team's units up/downed/in an aura, HP and abilities used per shot;
   scenes add log lines with `App.selftest_note()`.
   Effects tweens run on real time, so a just-killed unit can still show in a shot.

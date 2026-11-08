@@ -308,6 +308,8 @@ func unit_at(screen_pos: Vector2, own_only: bool = true) -> UnitView:
 	for view: UnitView in _views:
 		if own_only and view.unit.team != player_team:
 			continue
+		if not view.visible or view.unit.carried or view.unit.away:
+			continue
 		var center: Vector3 = view.pick_center()
 		var t: float = (center - origin).dot(dir)
 		if t <= 0.0 or t >= best_t:

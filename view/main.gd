@@ -27,6 +27,14 @@ var _fps_timer: float = 0.0
 var hero_panel: HeroPanel
 var _target_hint: Label
 var _player_hero: UnitView
+var _alerts: Alerts
+var _warning: LowHpWarning
+var _warning_sound: AudioStreamPlayer
+var _recovery_views: Dictionary[int, RecoveryView] = {}
+var _failed_screen: MissionFailedScreen
+## Self-test: when the low-HP warning fired and when the player's hero went down.
+var _warning_tick: int = -1
+var _player_down_tick: int = -1
 ## Self-test: abilities used per team.
 var _selftest_casts: Dictionary[SimUnit.Team, int] = {SimUnit.Team.BLUE: 0, SimUnit.Team.RED: 0}
 
@@ -57,6 +65,18 @@ func _ready() -> void:
 	selection.selection_changed.connect(_on_selection_changed)
 	_on_selection_changed(0)
 	_build_hero_hud()
+	_alerts = Alerts.new()
+	$UI.add_child(_alerts)
+	_alerts.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_alerts.offset_left = -700.0
+	_alerts.offset_right = 700.0
+	_alerts.offset_top = 130.0
+	_alerts.offset_bottom = 330.0
+	_warning = LowHpWarning.new(world.rules.low_hp_warning_fraction)
+	_warning_sound = AudioStreamPlayer.new()
+	_warning_sound.stream = Sounds.warning()
+	_warning_sound.volume_db = -6.0
+	add_child(_warning_sound)
 
 	if App.is_selftest:
 		rts_camera.edge_pan_enabled = false
@@ -72,7 +92,10 @@ func _process(delta: float) -> void:
 	else:
 		_tick_accumulator += delta
 	var ticks: int = 0
-	while _tick_accumulator >= SimWorld.TICK_SECONDS and ticks < MAX_TICKS_PER_FRAME:
+	if world.outcome != SimWorld.Outcome.NONE:
+		_tick_accumulator = 0.0  # mission over: the sim stops
+	while _tick_accumulator >= SimWorld.TICK_SECONDS and ticks < MAX_TICKS_PER_FRAME \
+			and world.outcome == SimWorld.Outcome.NONE:
 		if App.is_selftest:
 			_selftest_use_abilities()
 		world.step()
@@ -84,6 +107,12 @@ func _process(delta: float) -> void:
 	var alpha: float = clampf(_tick_accumulator / SimWorld.TICK_SECONDS, 0.0, 1.0)
 	for view: UnitView in unit_views:
 		view.sync(alpha, delta)
+	for recovery_view: RecoveryView in _recovery_views.values():
+		recovery_view.sync(alpha, delta)
+		var carried: UnitView = _views_by_id.get(recovery_view.recovery.hero_id, null)
+		if carried != null and carried.unit.carried:
+			carried.position = recovery_view.carry_point()
+	_update_low_hp_warning()
 
 	_fps_timer -= delta
 	if _fps_timer <= 0.0:
@@ -122,6 +151,33 @@ func _handle_events() -> void:
 			CombatEvent.Kind.DOWNED:
 				if view != null:
 					view.set_downed()
+					if view == _player_hero:
+						_player_down_tick = world.tick
+						_alerts.show_alert("Your %s is down!" % view.unit.stats.display_name, Color(1.0, 0.35, 0.3))
+			CombatEvent.Kind.RECOVERY_SENT:
+				for recovery: SimRecovery in world.recoveries:
+					if recovery.id == event.other_id and view != null:
+						var ship: RecoveryView = RecoveryView.new()
+						effects.add_child(ship)
+						ship.setup(recovery, view.global_position)
+						_recovery_views[recovery.id] = ship
+						_alerts.show_alert("%s is down. A dropship is coming to recover it." % view.unit.stats.display_name,
+								Color(1.0, 0.85, 0.4))
+			CombatEvent.Kind.HERO_AWAY:
+				var ship_gone: RecoveryView = _recovery_views.get(event.other_id, null)
+				if ship_gone != null:
+					_recovery_views.erase(event.other_id)
+					ship_gone.queue_free()
+				if view != null:
+					view.visible = false
+					_alerts.show_alert("%s has left the field. Back in %d s." % [view.unit.stats.display_name,
+							ceili(event.amount / float(SimWorld.TICKS_PER_SECOND))], Color(1.0, 0.85, 0.4))
+			CombatEvent.Kind.HERO_RETURNED:
+				if view != null:
+					view.set_revived()
+					_alerts.show_alert("%s has returned." % view.unit.stats.display_name, Color(1.0, 0.6, 0.4))
+			CombatEvent.Kind.MISSION_FAILED:
+				_show_mission_failed()
 
 
 ## Portrait + ability bar for the player's hero, and the targeting prompt.
@@ -186,6 +242,31 @@ func _on_portrait_clicked(double_click: bool) -> void:
 		rts_camera.snap_to(_player_hero.global_position, rts_camera.get_distance())
 
 
+## Low-HP warning for the player's hero: alert + sound once, portrait pulses.
+func _update_low_hp_warning() -> void:
+	if _player_hero == null or not is_instance_valid(_player_hero):
+		return
+	var hero: SimUnit = _player_hero.unit
+	if _warning.update(hero.hp_fraction(), hero.can_act()):
+		_warning_tick = world.tick
+		_alerts.show_alert("Warning: your %s is badly damaged!" % hero.stats.display_name, Color(1.0, 0.3, 0.25))
+		_warning_sound.play()
+	if hero_panel != null:
+		hero_panel.warning = _warning.active and hero_panel.unit == hero
+
+
+func _show_mission_failed() -> void:
+	if _failed_screen != null:
+		return
+	selection.cancel_ability()
+	_failed_screen = MissionFailedScreen.new()
+	$UI.add_child(_failed_screen)
+	var hero_name: String = _player_hero.unit.stats.display_name if _player_hero != null else "hero"
+	_failed_screen.setup("Your %s is down." % hero_name)
+	_failed_screen.restart_pressed.connect(func() -> void: get_tree().reload_current_scene())
+	_failed_screen.quit_pressed.connect(func() -> void: get_tree().quit())
+
+
 func _on_selection_changed(count: int) -> void:
 	selection_label.text = "Selected: %d" % count if count > 0 else ""
 
@@ -228,6 +309,11 @@ func _selftest_setup() -> void:
 	for view: UnitView in unit_views:
 		if view.unit.team == SimUnit.Team.RED and view.unit.stats.is_hero:
 			selection.order_attack(view)
+			# Exercise milestone 6: the Red Leader starts nearly down, so the
+			# recovery dropship comes early; it returns after 12 s instead of 60.
+			view.unit.hp = 60
+	world.rules = world.rules.duplicate() as HeroRules
+	world.rules.return_seconds = 12.0
 
 
 ## Self-test stand-in for the player and the (future) AI: each hero uses its
@@ -288,7 +374,11 @@ func _on_selftest_shot(index: int, _total: int) -> void:
 	elif index == 3:
 		selection.set_inspected(null)
 		App.selftest_note("inspect cleared: panel shows %s" % hero_panel.unit.stats.display_name)
-	match (index - 1) % 5:
+	var ship_pose: bool = index == 2 and not _recovery_views.is_empty()
+	match (index - 1) % 5 if not ship_pose else -1:
+		-1:
+			var ship: RecoveryView = _recovery_views.values()[0] as RecoveryView
+			rts_camera.snap_to(Vector3(ship.position.x, 0.0, ship.position.z), rts_camera.min_distance + 8.0)
 		0:
 			rts_camera.snap_to(_team_center(SimUnit.Team.BLUE), rts_camera.start_distance)
 		1, 2:
@@ -316,4 +406,7 @@ func _on_selftest_shot(index: int, _total: int) -> void:
 				buffed += 1
 		summary.append("%s: %d up (%d hp), %d downed, %d in aura, %d abilities used" % [
 				"blue" if team == SimUnit.Team.BLUE else "red", alive, hp, downed, buffed, _selftest_casts[team]])
-	App.selftest_note("shot %d (tick %d): %s; views %d" % [index, world.tick, ", ".join(summary), unit_views.size()])
+	App.selftest_note("shot %d (tick %d): %s; views %d; recoveries %d; outcome %d" % [index, world.tick,
+			", ".join(summary), unit_views.size(), world.recoveries.size(), world.outcome])
+	App.selftest_note("  alerts so far: %s" % " | ".join(_alerts.history))
+	App.selftest_note("  low-HP warning tick %d, player hero down tick %d" % [_warning_tick, _player_down_tick])
