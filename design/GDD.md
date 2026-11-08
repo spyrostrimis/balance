@@ -92,7 +92,7 @@ Religious, mysterious fanatics. Like the Emperor's forces in Dune II.
   - **60 s** after leaving the map the hero returns on the **free cell nearest its
     side's start area** (decided), **full HP, abilities ready**.
   - Recovery unit speed 6 cells/s (about 3x a Leader) and 2 s hovering over the
-    hero to load it **(proposal)**.
+    hero to load it (decided).
 - **Player hero downed** = mission failed (decided). A simple "Mission failed"
   screen with Restart / Quit for now; the real start/end screens come in milestone 7.
 - **Low-HP warning** (decided): when the player's hero drops below **30% HP**: an
