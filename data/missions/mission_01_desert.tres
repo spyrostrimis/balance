@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="MissionData" load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://sim/mission_data.gd" id="1_mission"]
+[ext_resource type="Script" path="res://sim/unit_stats.gd" id="2_stats"]
+[ext_resource type="Resource" path="res://data/maps/mission_01.tres" id="3_map"]
+[ext_resource type="Resource" path="res://data/units/blue_leader.tres" id="4_blue_leader"]
+[ext_resource type="Resource" path="res://data/units/red_leader.tres" id="5_red_leader"]
+[ext_resource type="Resource" path="res://data/units/infantry.tres" id="6_infantry"]
+[ext_resource type="Resource" path="res://data/units/light_vehicle.tres" id="7_vehicle"]
+[ext_resource type="Resource" path="res://data/rules/hero_rules.tres" id="8_rules"]
+[ext_resource type="Resource" path="res://data/rules/objective_mission_01.tres" id="9_objective"]
+[ext_resource type="Resource" path="res://data/rules/ai_rules.tres" id="10_ai"]
+
+[resource]
+script = ExtResource("1_mission")
+display_name = "The Rock"
+briefing = "Deep in the dunes lies a rock veined with Orichalcum. Blue's Leader has brought troops to claim it. Take it first: the side that holds this rock builds the next army, and Red does not share."
+look = &"desert"
+map = ExtResource("3_map")
+blue_roster = Array[ExtResource("2_stats")]([ExtResource("4_blue_leader"), ExtResource("6_infantry"), ExtResource("6_infantry"), ExtResource("7_vehicle")])
+red_roster = Array[ExtResource("2_stats")]([ExtResource("5_red_leader"), ExtResource("6_infantry"), ExtResource("6_infantry"), ExtResource("7_vehicle")])
+player_team = 1
+hero_rules = ExtResource("8_rules")
+objective = ExtResource("9_objective")
+ai_rules = ExtResource("10_ai")

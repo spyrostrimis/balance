@@ -14,6 +14,8 @@
 [resource]
 script = ExtResource("1_mission")
 display_name = "The Rock"
+briefing = "A rich Orichalcum rock stands between your camp and Red's. Red's Leader is already marching for it. Whoever holds the rock decides who builds the next army."
+look = &"forest"
 map = ExtResource("3_map")
 blue_roster = Array[ExtResource("2_stats")]([ExtResource("4_blue_leader"), ExtResource("6_infantry"), ExtResource("6_infantry"), ExtResource("7_vehicle")])
 red_roster = Array[ExtResource("2_stats")]([ExtResource("5_red_leader"), ExtResource("6_infantry"), ExtResource("6_infantry"), ExtResource("7_vehicle")])

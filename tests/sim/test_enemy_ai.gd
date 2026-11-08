@@ -206,3 +206,34 @@ func test_mission_01_plays_to_an_end_when_blue_contests() -> void:
 		ticks += 1
 	assert_int(world.outcome).override_failure_message("no result after %d ticks" % ticks) \
 			.is_not_equal(SimWorld.Outcome.NONE)
+
+
+func test_desert_mission_you_play_red_against_blue_ai() -> void:
+	var data: MissionData = load("res://data/missions/mission_01_desert.tres") as MissionData
+	assert_int(data.player_team).is_equal(RED)
+	assert_str(String(data.look)).is_equal("desert")
+	var world: SimWorld = SimWorld.new()
+	assert_str(world.setup_mission(data)).is_empty()
+	assert_int(world.ai.size()).is_equal(1)
+	assert_int(world.ai[0].team).is_equal(BLUE)
+	# A passive Red player loses the rock to Blue's AI.
+	var ticks: int = 0
+	while world.outcome == SimWorld.Outcome.NONE and ticks < 120 * TPS:
+		world.step()
+		ticks += 1
+	assert_int(world.outcome).is_equal(SimWorld.Outcome.DEFEAT)
+	assert_int(world.objective.owner_team).is_equal(BLUE)
+
+
+func test_blue_ai_hero_repairs_a_damaged_ally() -> void:
+	var world: SimWorld = _world()
+	world.ai.clear()
+	world.ai.append(EnemyAi.new(BLUE, _rules))
+	var repair: AbilityStats = load("res://data/abilities/repair.tres") as AbilityStats
+	var abilities: Array[AbilityStats] = [repair]
+	var hero: SimUnit = world.spawn_unit(_hero_stats(abilities), BLUE, Vector2i(2, 13))
+	var hurt: SimUnit = world.spawn_unit(_soldier, BLUE, Vector2i(4, 13))
+	hurt.hp = 20
+	_run(world, 3)
+	assert_int(hurt.hp).is_greater(20)
+	assert_bool(hero.ability_ready(0)).is_false()

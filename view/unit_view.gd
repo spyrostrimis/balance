@@ -61,9 +61,10 @@ func setup(sim_unit: SimUnit, sim_world: SimWorld) -> void:
 	_build_aura_rings()
 	App.debug_overlay_changed.connect(func(_on: bool) -> void: _refresh_aura_rings())
 	_refresh_aura_rings()
-	# Face the enemy side at start: Blue (south-west) looks north-east, Red looks south-west.
-	# Yaw θ faces world direction (-sin θ, -cos θ) in XZ.
-	rotation.y = -PI * 0.25 if unit.team == SimUnit.Team.BLUE else PI * 0.75
+	# Face the middle of the map at start. Yaw θ faces world direction (-sin θ, -cos θ) in XZ.
+	var to_center: Vector2 = Vector2(sim_world.grid.size()) * 0.5 - unit.pos
+	if to_center.length_squared() > 0.01:
+		rotation.y = atan2(-to_center.x, -to_center.y)
 	sync(1.0, 0.0)
 
 

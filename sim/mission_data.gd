@@ -4,6 +4,10 @@ extends Resource
 ## team's spawn cell i (spawn cells are read row by row from the map).
 
 @export var display_name: String = ""
+## Start-screen story text.
+@export_multiline var briefing: String = ""
+## Which art look the view uses (e.g. &"desert", &"forest").
+@export var look: StringName = &"desert"
 @export var map: MapLayout
 @export var blue_roster: Array[UnitStats] = []
 @export var red_roster: Array[UnitStats] = []

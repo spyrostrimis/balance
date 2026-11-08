@@ -6,7 +6,8 @@ extends Node3D
 ## (the sim waits), the capture objective (zone on the map + panel), and an end
 ## screen on victory or defeat.
 
-const MISSION_PATH: String = "res://data/missions/mission_01.tres"
+const MISSION_PATH: String = "res://data/missions/mission_01_desert.tres"
+const TEAM_NAMES: Dictionary[SimUnit.Team, String] = {SimUnit.Team.BLUE: "Blue", SimUnit.Team.RED: "Red"}
 ## The camera pivot stays this far (world units) inside the map edge.
 const CAMERA_EDGE_INSET: float = 8.0
 ## Never run more than this many sim ticks in one frame (avoids a spiral after a hitch).
@@ -66,9 +67,10 @@ func _ready() -> void:
 		_views_by_id[unit.id] = view
 
 	rts_camera.bounds = GridSpace.map_rect(world.grid.size()).grow(-CAMERA_EDGE_INSET)
-	rts_camera.snap_to(_spawn_center(world.grid.blue_spawns), rts_camera.start_distance)
+	rts_camera.snap_to(_spawn_center(_spawns(world.player_team)), rts_camera.start_distance)
 
 	selection.world = world
+	selection.player_team = world.player_team
 	selection.camera = rts_camera.camera
 	selection.marker_parent = effects
 	selection.set_unit_views(unit_views.duplicate())
@@ -173,7 +175,7 @@ func _handle_events() -> void:
 			CombatEvent.Kind.ROCK_CAPTURED:
 				var mine: bool = event.other_id == selection.player_team
 				_alerts.show_alert("You have taken the rock! Keep enemies out of the zone for %d s." % roundi(world.objective.rules.hold_seconds)
-						if mine else "Red has taken the rock! Get into the zone to stop its clock.",
+						if mine else "%s has taken the rock! Get into the zone to stop its clock." % TEAM_NAMES[_enemy_team()],
 						Color(0.5, 0.75, 1.0) if mine else Color(1.0, 0.45, 0.35))
 			CombatEvent.Kind.MISSION_WON:
 				_show_end(true, event.amount as SimWorld.Reason)
@@ -302,15 +304,15 @@ func _show_start_screen(data: MissionData) -> void:
 	if world.objective != null:
 		hold = roundi(world.objective.rules.hold_seconds)
 		capture = roundi(world.objective.rules.capture_seconds)
-	_start_screen.setup("Mission 1 — %s" % data.display_name,
-			"A rich Orichalcum rock stands between your camp and Red's. Red's Leader is already "
-			+ "marching for it. Whoever holds the rock decides who builds the next army.",
+	var enemy: String = TEAM_NAMES[_enemy_team()]
+	var mine: String = TEAM_NAMES[world.player_team]
+	_start_screen.setup("Mission 1 — %s" % data.display_name, data.briefing,
 			PackedStringArray([
 				"Capture the rock: have only your units in the marked zone for %d s." % capture,
 				"Hold it for %d s with no enemy in the zone. Any enemy in the zone resets the clock." % hold,
-				"Or destroy every Red troop while the Red Leader is down.",
-				"Your Leader must not fall: if the Blue Leader goes down, the mission fails.",
-				"Red wins if it holds the rock for %d s." % hold,
+				"Or destroy every %s troop while the %s Leader is down." % [enemy, enemy],
+				"Your Leader must not fall: if the %s Leader goes down, the mission fails." % mine,
+				"%s wins if it holds the rock for %d s." % [enemy, hold],
 			]))
 	_start_screen.start_pressed.connect(_start_mission)
 
@@ -334,11 +336,11 @@ func _show_end(victory: bool, reason: SimWorld.Reason) -> void:
 		SimWorld.Reason.HERO_DOWN:
 			why = "Your %s is down." % hero_name
 		SimWorld.Reason.ROCK_HELD:
-			why = "You held the Orichalcum rock." if victory else "Red held the Orichalcum rock."
+			why = "You held the Orichalcum rock." if victory else "%s held the Orichalcum rock." % TEAM_NAMES[_enemy_team()]
 		SimWorld.Reason.ENEMY_ROUTED:
-			why = "Red's army is destroyed and its Leader is down."
+			why = "%s's army is destroyed and its Leader is down." % TEAM_NAMES[_enemy_team()]
 	var seconds: int = world.tick / SimWorld.TICKS_PER_SECOND
-	var enemy: SimUnit.Team = SimUnit.Team.RED if selection.player_team == SimUnit.Team.BLUE else SimUnit.Team.BLUE
+	var enemy: SimUnit.Team = _enemy_team()
 	var details: PackedStringArray = PackedStringArray([
 		"Time: %d:%02d" % [seconds / 60, seconds % 60],
 		"Your units lost: %d   ·   Enemy units destroyed: %d   ·   Enemy Leader downed: %d" % [
@@ -355,6 +357,14 @@ func _show_end(victory: bool, reason: SimWorld.Reason) -> void:
 
 func _on_selection_changed(count: int) -> void:
 	selection_label.text = "Selected: %d" % count if count > 0 else ""
+
+
+func _enemy_team() -> SimUnit.Team:
+	return SimUnit.Team.RED if world.player_team == SimUnit.Team.BLUE else SimUnit.Team.BLUE
+
+
+func _spawns(team: SimUnit.Team) -> Array[Vector2i]:
+	return world.grid.blue_spawns if team == SimUnit.Team.BLUE else world.grid.red_spawns
 
 
 func _spawn_center(cells: Array[Vector2i]) -> Vector3:
@@ -376,12 +386,13 @@ func _team_center(team: SimUnit.Team) -> Vector3:
 	return sum / maxi(count, 1)
 
 
-## Self-test: select all Blue units through the same API the mouse uses, check
-## picking/box-selection math, then send them to the rock (Red's AI plays Red).
+## Self-test: select all the player's units through the same API the mouse uses,
+## check picking/box-selection math, then send them to the rock (the AI plays
+## the other side).
 func _selftest_setup() -> void:
 	var own: Array[UnitView] = []
 	for view: UnitView in unit_views:
-		if view.unit.team == SimUnit.Team.BLUE:
+		if view.unit.team == world.player_team:
 			own.append(view)
 	# Picking round trip: clicking a unit's projected centre must hit that unit.
 	await get_tree().process_frame
@@ -394,7 +405,9 @@ func _selftest_setup() -> void:
 	App.selftest_note("box select (whole screen): %d selected" % selection.selected_views().size())
 	if world.objective != null:
 		var c: Vector2 = world.objective.center()
-		selection.order_move(Vector2i(floori(c.x) - 1, floori(c.y) + 2))
+		# Approach from the player's side of the rock.
+		var side: Vector2 = (SimUnit.cell_center(_spawns(world.player_team)[0]) - c).normalized()
+		selection.order_move(Vector2i(floori(c.x + side.x * 2.5), floori(c.y + side.y * 2.5)))
 
 
 ## Self-test stand-in for the player: the Blue Leader uses its active ability
@@ -460,7 +473,7 @@ func _on_selftest_shot(index: int, _total: int) -> void:
 			var ship: RecoveryView = _recovery_views.values()[0] as RecoveryView
 			rts_camera.snap_to(Vector3(ship.position.x, 0.0, ship.position.z), rts_camera.min_distance + 8.0)
 		0:
-			rts_camera.snap_to(_team_center(SimUnit.Team.BLUE), rts_camera.start_distance)
+			rts_camera.snap_to(_team_center(world.player_team), rts_camera.start_distance)
 		1, 2:
 			rts_camera.snap_to(fight, rts_camera.min_distance + 6.0)
 		3:
