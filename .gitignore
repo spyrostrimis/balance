@@ -19,3 +19,8 @@ GdUnitRunner.cfg
 Thumbs.db
 .vscode/
 .idea/
+
+# Temporary asset review (not shipped)
+assets/_review/
+tools/review/
+assets/library/
