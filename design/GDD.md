@@ -198,6 +198,25 @@ Stats (mirrored for both sides, in `data/units/`):
 Later: **patrols** — troops patrolling an area; when they spot an enemy within
 engage range they raise the alarm (e.g. call nearby units).
 
+## Art direction
+Decided: two looks, one per campaign setting. Each look is one art family.
+- **Desert (Red's campaign):** Dune II (1992) made in 2026. Orange sand with dunes,
+  dark rock plateaus, chunky readable vehicles, saturated team colours. Modern
+  lighting, shadows, dust, explosions and smoke. Camera steeper, near top-down
+  (about 65–70°). UI follows Dune II's layout, modernised: top bar with messages
+  and menu, right sidebar with the selected unit's portrait and HP, command buttons
+  (Attack, Move, Retreat, Guard, hero abilities) and the minimap; ornate metal frame.
+- **Forest (Blue's campaign):** Warcraft III: Reforged. Lush saturated greens,
+  chunky pines, painted ground, bold silhouettes, glowing effects; Reforged-style UI.
+- Asset sources for now: Kenney, Quaternius, KayKit. Paid packs maybe later.
+  The CC0-only rule is dropped; every asset is credited in `assets/CREDITS.md`.
+
+Commands for the Desert sidebar **(proposal)**:
+- **Retreat:** the selected units walk back to their start area and don't fight
+  on the way.
+- **Guard:** the selected units hold their spot: they fire at enemies in range but
+  don't chase.
+
 ## Hazards and creatures
 - Like the Dune worms: creatures that roam and cause havoc. Different planets, different creatures —
   e.g. a pterodactyl or a huge lizard that eats harvesters, troops and civilians and can
@@ -210,6 +229,11 @@ engage range they raise the alarm (e.g. call nearby units).
 
 ### Mission 1 — "The Rock" (working name)
 - Purpose: teach the basics by playing.
+- **Two versions, same objectives** (decided):
+  - **Red's campaign: Desert.** You play Red, the AI plays Blue. Cliff-walled
+    (recovery by dropship). Dune II look (see Art direction).
+  - **Blue's campaign: Forest.** You play Blue, the AI plays Red. Unwalled forest
+    with a glade (recovery by truck). Warcraft III: Reforged look.
 - Small map (32×32 cells). The Orichalcum rock is in the middle.
 - Final look (decided, for a later art pass): a **forest** scene, **not walled**,
   with a **glade** in the middle where the Orichalcum rock stands. Recovery then

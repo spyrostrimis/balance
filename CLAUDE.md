@@ -29,7 +29,8 @@ fighting for control of the Orichalcum rock in the middle. Spec: `design/GDD.md`
 - Cell size: one constant (`CELL_SIZE`, default 2.0 world units) in one place.
   All grid ↔ world conversion goes through a single helper
   (`grid_to_world(Vector2i) -> Vector3`, `world_to_grid(Vector3) -> Vector2i`).
-- Camera: fixed-angle RTS camera (tilted, no rotation in v1), pan with screen
+- Camera: fixed-angle RTS camera (tilted, no rotation in v1; the pitch is set per
+  mission look — the Desert is steeper, near top-down), pan with screen
   edges + WASD/arrows + middle-mouse drag (grab the map), zoom with the mouse wheel
   between a min and max, clamped to map bounds.
 - Readability: terrain meshes stay inside their own cell. Units hidden behind
@@ -44,10 +45,14 @@ fighting for control of the Orichalcum rock in the middle. Spec: `design/GDD.md`
   (`view/app.gd`, autoload `App`). F3 toggles a debug overlay (`App.debug_overlay`)
   for things that are invisible in the game, e.g. aura radii — never show those
   without it.
-- Art: stylised low-poly, bright saturated colours, ONE art family (no mixing packs
-  with different proportions/styles). Placeholders (primitive meshes, team-coloured)
-  until a milestone works. Every external asset is CC0 or own work, listed with its
-  source in `assets/CREDITS.md`.
+- Art: two looks, one per campaign setting (design/GDD.md → Art direction):
+  **Desert** = Dune II feel made in 2026 (sand and rock, chunky vehicles, Dune II
+  UI layout, modern lighting/effects); **Forest** = Warcraft III: Reforged feel
+  (lush, saturated, stylised). Within one look, ONE art family — no mixing packs
+  with different proportions/styles. Asset sources for now: Kenney, Quaternius,
+  KayKit (paid packs may come later). Every external asset is listed with its
+  source and licence in `assets/CREDITS.md`. Placeholders (primitive meshes,
+  team-coloured) are fine until a milestone's art pass.
 
 ## Architecture — the one rule that matters most
 Simulation and presentation are separate.
@@ -154,6 +159,14 @@ stdout/stderr reach the terminal). In Git Bash: `/c/Godot/Godot_v4.7.2-stable_wi
    mission start/end screens, and an enemy AI that contests the rock, focus-fires,
    uses its hero's abilities and pulls its hero back at low HP.
    Done when: Mission 1 is playable from start to victory or defeat.
+8. **Art pass: Desert** — Mission 1 of Red's campaign (you play Red): Dune II look
+   made in 2026. Sand/rock terrain, real models and animations, effects, steeper
+   camera, Dune II-style UI (top message bar, right sidebar with portrait, commands
+   and minimap), themed start/end screens.
+   Done when: the Desert mission plays as before and looks like a modern Dune II.
+9. **Art pass: Forest** — Mission 1 of Blue's campaign (you play Blue): Warcraft III:
+   Reforged look. Unwalled forest with a glade around the rock (recovery by truck).
+   Done when: the Forest mission plays as before and looks like Reforged.
 
 Later (order to be decided): harvester and refinery, buildings and production,
 fog of war, hazard creatures, Green faction, campaign structure.
