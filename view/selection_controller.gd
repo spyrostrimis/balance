@@ -7,9 +7,13 @@ extends Control
 ##   Right click enemy: attack it (red marker).  Right click elsewhere: move (units
 ##   stop on the nearest free cells; red marker = the clicked cell itself is blocked).
 ##   Esc: clear selection.
+##   Q (action ability_1): target the player hero's first active ability, then
+##   left click a valid unit to use it. Right click / Esc cancels.
 ## Orders go to the sim as commands; this node never changes sim state directly.
 
 signal selection_changed(count: int)
+## Ability targeting started (index, prompt text) or ended (-1, "").
+signal targeting_changed(index: int, prompt: String)
 
 const DRAG_THRESHOLD_PX: float = 6.0
 const BOX_FILL: Color = Color(0.3, 1.0, 0.35, 0.12)
@@ -23,6 +27,11 @@ var camera: Camera3D
 var player_team: SimUnit.Team = SimUnit.Team.BLUE
 ## Parent for move markers (3D).
 var marker_parent: Node3D
+## The player's hero (abilities, portrait).
+var hero_view: UnitView
+
+## Ability whose target is being chosen, or -1.
+var _targeting: int = -1
 
 var _views: Array[UnitView] = []
 var _selected: Array[UnitView] = []
@@ -46,6 +55,13 @@ func selected_views() -> Array[UnitView]:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ability_1", false, true):
+		begin_ability(_nth_active(0))
+		get_viewport().set_input_as_handled()
+		return
+	if _targeting != -1 and _targeting_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	var mb: InputEventMouseButton = event as InputEventMouseButton
 	if mb != null:
 		if mb.button_index == MOUSE_BUTTON_LEFT:
@@ -79,6 +95,97 @@ func _unhandled_input(event: InputEvent) -> void:
 	if key != null and key.pressed and not key.echo and key.keycode == KEY_ESCAPE:
 		clear_selection()
 		get_viewport().set_input_as_handled()
+
+
+## While targeting: left click uses the ability, right click / Esc cancels.
+## Returns true if the event was used.
+func _targeting_input(event: InputEvent) -> bool:
+	var mb: InputEventMouseButton = event as InputEventMouseButton
+	if mb != null and mb.pressed:
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			var target: UnitView = unit_at(mb.position, false)
+			if target == null:
+				_show_marker_at_screen(mb.position)
+			else:
+				cast_on(target)
+			return true
+		if mb.button_index == MOUSE_BUTTON_RIGHT:
+			cancel_ability()
+			return true
+	if mb != null and not mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+		return true
+	var key: InputEventKey = event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_ESCAPE:
+		cancel_ability()
+		return true
+	return false
+
+
+func is_targeting() -> bool:
+	return _targeting != -1
+
+
+func targeting_index() -> int:
+	return _targeting
+
+
+## Starts choosing a target for the hero's ability `index` (if it can be used now).
+func begin_ability(index: int) -> bool:
+	if hero_view == null or not is_instance_valid(hero_view) or not hero_view.unit.can_act():
+		return false
+	var ability: AbilityStats = hero_view.unit.ability(index)
+	if ability == null or not ability.is_active() or not hero_view.unit.ability_ready(index):
+		return false
+	_targeting = index
+	_pressing = false
+	_dragging = false
+	queue_redraw()
+	Input.set_default_cursor_shape(Input.CURSOR_CROSS)
+	var who: String = "a friendly unit (or the portrait for the Leader)" 			if ability.target == AbilityStats.Target.ALLY else "an enemy unit"
+	targeting_changed.emit(index, "%s: left click %s.   Right click / Esc: cancel" % [ability.display_name, who])
+	return true
+
+
+func cancel_ability() -> void:
+	if _targeting == -1:
+		return
+	_targeting = -1
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	targeting_changed.emit(-1, "")
+
+
+## Uses the ability being targeted on `target`. Returns false (red marker, keeps
+## targeting) if the target isn't valid for it.
+func cast_on(target: UnitView) -> bool:
+	if _targeting == -1 or hero_view == null or not is_instance_valid(hero_view):
+		return false
+	var ability: AbilityStats = hero_view.unit.ability(_targeting)
+	if ability == null or not world.is_valid_cast_target(hero_view.unit, ability, target.unit):
+		_show_marker(target.unit.cell(), false)
+		return false
+	_show_marker(target.unit.cell(), true)
+	world.queue_command(AbilityCommand.new(player_team, hero_view.unit.id, _targeting, target.unit.id))
+	cancel_ability()
+	return true
+
+
+func _nth_active(n: int) -> int:
+	if hero_view == null or not is_instance_valid(hero_view):
+		return -1
+	var seen: int = 0
+	for i: int in hero_view.unit.stats.abilities.size():
+		var ability: AbilityStats = hero_view.unit.ability(i)
+		if ability != null and ability.is_active():
+			if seen == n:
+				return i
+			seen += 1
+	return -1
+
+
+func _show_marker_at_screen(screen_pos: Vector2) -> void:
+	var cell_v: Variant = ground_cell_at(screen_pos)
+	if cell_v != null:
+		_show_marker(cell_v as Vector2i, false)
 
 
 func _draw() -> void:

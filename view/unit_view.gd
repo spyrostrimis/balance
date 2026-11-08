@@ -2,8 +2,9 @@ class_name UnitView
 extends Node3D
 ## Placeholder 3D model for one SimUnit: team-coloured primitives, a selection
 ## ring, smooth interpolation between sim ticks, turning to face movement or the
-## attack target, a death animation and a "downed" pose for heroes.
-## Model forward is -Z.
+## attack target, a death animation, a "downed" pose for heroes and a ground
+## ring showing each hero aura's radius. Model forward is -Z.
+## setup_display() builds the model alone (no sim unit), e.g. for the portrait.
 
 const TEAM_COLORS: Dictionary[SimUnit.Team, Color] = {
 	SimUnit.Team.BLUE: Color(0.15, 0.42, 1.0),
@@ -17,6 +18,9 @@ const SILHOUETTE_SHADER: Shader = preload("res://view/shaders/occluded_silhouett
 const SILHOUETTE_ALPHA: float = 0.6
 const DEATH_SECONDS: float = 0.45
 const DOWNED_DARKEN: float = 0.45
+const AURA_RING_WIDTH: float = 0.14
+const AURA_RING_ALPHA: float = 0.55
+const AURA_FILL_ALPHA: float = 0.07
 
 var unit: SimUnit
 ## Read-only access to the sim (to face the attack target).
@@ -37,32 +41,45 @@ var _silhouette: ShaderMaterial
 var _model: Node3D
 var _materials: Array[StandardMaterial3D] = []
 var _dying: bool = false
+var _aura_rings: Array[Node3D] = []
 
 
 func setup(sim_unit: SimUnit, sim_world: SimWorld) -> void:
 	unit = sim_unit
 	world = sim_world
 	name = "Unit%d_%s" % [unit.id, unit.stats.id]
-	_model = Node3D.new()
-	_model.name = "Model"
-	add_child(_model)
-	var color: Color = TEAM_COLORS[unit.team]
-	_silhouette = ShaderMaterial.new()
-	_silhouette.shader = SILHOUETTE_SHADER
-	var sil_color: Color = color.lightened(0.25)
-	sil_color.a = SILHOUETTE_ALPHA
-	_silhouette.set_shader_parameter("silhouette_color", sil_color)
-	if unit.stats.is_hero:
-		_build_hero(color)
-	elif unit.stats.id == &"light_vehicle":
-		_build_vehicle(color)
-	else:
-		_build_infantry(color)
+	_build_model(unit.stats, unit.team, true)
 	_build_ring()
+	_build_aura_rings()
 	# Face the enemy side at start: Blue (south-west) looks north-east, Red looks south-west.
 	# Yaw θ faces world direction (-sin θ, -cos θ) in XZ.
 	rotation.y = -PI * 0.25 if unit.team == SimUnit.Team.BLUE else PI * 0.75
 	sync(1.0, 0.0)
+
+
+## Model only (no sim unit, ring or silhouette): for portraits.
+func setup_display(stats: UnitStats, team: SimUnit.Team) -> void:
+	name = "Display_%s" % stats.id
+	_build_model(stats, team, false)
+
+
+func _build_model(stats: UnitStats, team: SimUnit.Team, with_silhouette: bool) -> void:
+	_model = Node3D.new()
+	_model.name = "Model"
+	add_child(_model)
+	var color: Color = TEAM_COLORS[team]
+	if with_silhouette:
+		_silhouette = ShaderMaterial.new()
+		_silhouette.shader = SILHOUETTE_SHADER
+		var sil_color: Color = color.lightened(0.25)
+		sil_color.a = SILHOUETTE_ALPHA
+		_silhouette.set_shader_parameter("silhouette_color", sil_color)
+	if stats.is_hero:
+		_build_hero(color)
+	elif stats.id == &"light_vehicle":
+		_build_vehicle(color)
+	else:
+		_build_infantry(color)
 
 
 ## Places the model between the last two sim positions (alpha 0..1).
@@ -106,6 +123,8 @@ func die() -> void:
 
 ## Hero at 0 HP: falls over and greys out, stays on the map.
 func set_downed() -> void:
+	for ring: Node3D in _aura_rings:
+		ring.visible = false  # a downed hero has no aura
 	for mat: StandardMaterial3D in _materials:
 		mat.albedo_color = mat.albedo_color.darkened(DOWNED_DARKEN)
 	var tween: Tween = create_tween().set_parallel(true)
@@ -193,6 +212,50 @@ func _build_ring() -> void:
 	_ring.scale = Vector3(1.0, 0.3, 1.0)
 	_ring.visible = selected
 	add_child(_ring)
+
+
+## A faint ground ring (and fill) per aura, sized to the aura's radius.
+func _build_aura_rings() -> void:
+	for ability: AbilityStats in unit.stats.abilities:
+		if ability == null or ability.kind != AbilityStats.Kind.AURA:
+			continue
+		var radius: float = ability.aura_radius * GridSpace.CELL_SIZE
+		var color: Color = TEAM_COLORS[unit.team].lightened(0.3)
+		var root: Node3D = Node3D.new()
+		root.name = "Aura_%s" % ability.id
+		root.position = Vector3(0.0, 0.04, 0.0)
+		add_child(root)
+		var torus: TorusMesh = TorusMesh.new()
+		torus.inner_radius = radius - AURA_RING_WIDTH
+		torus.outer_radius = radius
+		torus.rings = 96
+		torus.ring_segments = 4
+		color.a = AURA_RING_ALPHA
+		var ring: MeshInstance3D = _flat_mesh(torus, color)
+		ring.scale = Vector3(1.0, 0.15, 1.0)
+		root.add_child(ring)
+		var disc: CylinderMesh = CylinderMesh.new()
+		disc.top_radius = radius
+		disc.bottom_radius = radius
+		disc.height = 0.01
+		disc.radial_segments = 96
+		disc.rings = 1
+		color.a = AURA_FILL_ALPHA
+		root.add_child(_flat_mesh(disc, color))
+		_aura_rings.append(root)
+
+
+func _flat_mesh(mesh: Mesh, color: Color) -> MeshInstance3D:
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = color
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var node: MeshInstance3D = MeshInstance3D.new()
+	node.mesh = mesh
+	node.material_override = mat
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return node
 
 
 func _add_part(mesh: Mesh, color: Color, offset: Vector3) -> void:

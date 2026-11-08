@@ -1,7 +1,8 @@
 extends Node3D
 ## Mission 1 scene. Sets up the sim from mission data, builds the 3D view, runs
 ## the sim on its fixed tick, interpolates the view between ticks and turns sim
-## events (shots, deaths, downed heroes) into effects.
+## events (shots, abilities, deaths, downed heroes) into effects. The player's
+## hero gets the portrait + ability bar (HeroPanel).
 
 const MISSION_PATH: String = "res://data/missions/mission_01.tres"
 ## The camera pivot stays this far (world units) inside the map edge.
@@ -23,6 +24,11 @@ var unit_views: Array[UnitView] = []
 var _views_by_id: Dictionary[int, UnitView] = {}
 var _tick_accumulator: float = 0.0
 var _fps_timer: float = 0.0
+var hero_panel: HeroPanel
+var _target_hint: Label
+var _player_hero: UnitView
+## Self-test: abilities used per team.
+var _selftest_casts: Dictionary[SimUnit.Team, int] = {SimUnit.Team.BLUE: 0, SimUnit.Team.RED: 0}
 
 
 func _ready() -> void:
@@ -50,6 +56,7 @@ func _ready() -> void:
 	health_bars.views = unit_views
 	selection.selection_changed.connect(_on_selection_changed)
 	_on_selection_changed(0)
+	_build_hero_hud()
 
 	if App.is_selftest:
 		rts_camera.edge_pan_enabled = false
@@ -66,6 +73,8 @@ func _process(delta: float) -> void:
 		_tick_accumulator += delta
 	var ticks: int = 0
 	while _tick_accumulator >= SimWorld.TICK_SECONDS and ticks < MAX_TICKS_PER_FRAME:
+		if App.is_selftest:
+			_selftest_use_abilities()
 		world.step()
 		_handle_events()
 		_tick_accumulator -= SimWorld.TICK_SECONDS
@@ -90,6 +99,20 @@ func _handle_events() -> void:
 				var target: UnitView = _views_by_id.get(event.other_id, null)
 				if view != null and target != null:
 					Effects.shot(effects, view.muzzle_point(), target.pick_center(), UnitView.TEAM_COLORS[view.unit.team])
+			CombatEvent.Kind.ABILITY:
+				var target_view: UnitView = _views_by_id.get(event.other_id, null)
+				if view == null or target_view == null:
+					continue
+				_selftest_casts[view.unit.team] += 1
+				var ability: AbilityStats = view.unit.ability(event.ability_index)
+				if ability == null:
+					continue
+				match ability.effect:
+					AbilityStats.Effect.HEAL:
+						Effects.heal(effects, view.muzzle_point(), target_view.pick_center())
+					AbilityStats.Effect.DAMAGE:
+						Effects.cannon(effects, view.muzzle_point(), target_view.pick_center(),
+								ability.splash_radius * GridSpace.CELL_SIZE)
 			CombatEvent.Kind.DIED:
 				if view != null:
 					unit_views.erase(view)
@@ -99,6 +122,52 @@ func _handle_events() -> void:
 			CombatEvent.Kind.DOWNED:
 				if view != null:
 					view.set_downed()
+
+
+## Portrait + ability bar for the player's hero, and the targeting prompt.
+func _build_hero_hud() -> void:
+	for view: UnitView in unit_views:
+		if view.unit.team == selection.player_team and view.unit.stats.is_hero:
+			_player_hero = view
+			break
+	if _player_hero == null:
+		return
+	selection.hero_view = _player_hero
+	hero_panel = HeroPanel.new()
+	$UI.add_child(hero_panel)
+	hero_panel.setup(_player_hero.unit)
+	hero_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 16)
+	hero_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	hero_panel.ability_pressed.connect(func(index: int) -> void: selection.begin_ability(index))
+	hero_panel.portrait_clicked.connect(_on_portrait_clicked)
+	_target_hint = Label.new()
+	_target_hint.add_theme_font_size_override("font_size", 24)
+	_target_hint.add_theme_color_override("font_color", Color(0.6, 1.0, 0.65))
+	_target_hint.add_theme_color_override("font_outline_color", Color.BLACK)
+	_target_hint.add_theme_constant_override("outline_size", 6)
+	_target_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_target_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	$UI.add_child(_target_hint)
+	_target_hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	_target_hint.offset_left = -700.0
+	_target_hint.offset_right = 700.0
+	_target_hint.offset_top = -300.0
+	_target_hint.offset_bottom = -260.0
+	selection.targeting_changed.connect(func(index: int, prompt: String) -> void:
+		_target_hint.text = prompt
+		hero_panel.set_armed(index))
+
+
+func _on_portrait_clicked(double_click: bool) -> void:
+	if not is_instance_valid(_player_hero):
+		return
+	if selection.is_targeting():
+		selection.cast_on(_player_hero)  # e.g. Repair on the Leader itself
+		return
+	var only: Array[UnitView] = [_player_hero]
+	selection.set_selection(only)
+	if double_click:
+		rts_camera.snap_to(_player_hero.global_position, rts_camera.get_distance())
 
 
 func _on_selection_changed(count: int) -> void:
@@ -145,6 +214,49 @@ func _selftest_setup() -> void:
 			selection.order_attack(view)
 
 
+## Self-test stand-in for the player and the (future) AI: each hero uses its
+## active ability as soon as it's ready and there's a good target. Blue goes
+## through the real targeting UI; Red queues the command directly.
+func _selftest_use_abilities() -> void:
+	for view: UnitView in unit_views:
+		var hero: SimUnit = view.unit
+		if not hero.stats.is_hero or not hero.can_act():
+			continue
+		for i: int in hero.stats.abilities.size():
+			var ability: AbilityStats = hero.ability(i)
+			if ability == null or not ability.is_active() or not hero.ability_ready(i) or hero.is_casting():
+				continue
+			var target: UnitView = _selftest_pick_target(hero, ability)
+			if target == null:
+				continue
+			if view == _player_hero:
+				if selection.begin_ability(i):
+					selection.cast_on(target)
+			else:
+				world.queue_command(AbilityCommand.new(hero.team, hero.id, i, target.unit.id))
+
+
+func _selftest_pick_target(hero: SimUnit, ability: AbilityStats) -> UnitView:
+	var best: UnitView = null
+	var best_score: float = INF
+	for view: UnitView in unit_views:
+		var other: SimUnit = view.unit
+		if not world.is_valid_cast_target(hero, ability, other):
+			continue
+		var dist: float = hero.pos.distance_to(other.pos)
+		if dist > ability.cast_range + 2.0:
+			continue
+		var score: float = dist
+		if ability.target == AbilityStats.Target.ALLY:
+			if other.hp_fraction() > 0.75:
+				continue
+			score = other.hp_fraction()  # most damaged first
+		if score < best_score:
+			best = view
+			best_score = score
+	return best
+
+
 ## Poses: Blue on the way, the fight (x2), whole map, aftermath close-up.
 func _on_selftest_shot(index: int, _total: int) -> void:
 	var map_center: Vector3 = GridSpace.gridf_to_world(Vector2(world.grid.size()) * 0.5)
@@ -171,5 +283,10 @@ func _on_selftest_shot(index: int, _total: int) -> void:
 			else:
 				alive += 1
 				hp += unit.hp
-		summary.append("%s: %d up (%d hp), %d downed" % ["blue" if team == SimUnit.Team.BLUE else "red", alive, hp, downed])
+		var buffed: int = 0
+		for unit: SimUnit in world.units:
+			if unit.team == team and (unit.aura_damage_bonus > 0.0 or unit.aura_damage_reduction > 0.0):
+				buffed += 1
+		summary.append("%s: %d up (%d hp), %d downed, %d in aura, %d abilities used" % [
+				"blue" if team == SimUnit.Team.BLUE else "red", alive, hp, downed, buffed, _selftest_casts[team]])
 	App.selftest_note("shot %d (tick %d): %s; views %d" % [index, world.tick, ", ".join(summary), unit_views.size()])
